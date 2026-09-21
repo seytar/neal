@@ -15,6 +15,7 @@ import { runResumeRunCommand } from './commands/resume-run.js';
 import { getCurrentRunLogger } from './commands/runtime.js';
 import { runReviewCommand } from './commands/review.js';
 import { runSetupCommand } from './commands/setup.js';
+import { runShadowCommand } from './commands/shadow.js';
 import { runSquashCommand } from './commands/squash.js';
 import { runStatusCommand } from './commands/status.js';
 import {
@@ -85,6 +86,11 @@ async function main() {
 
   if (args[0] === 'setup') {
     await runSetupCommand(args);
+    return;
+  }
+
+  if (args[0] === 'shadow') {
+    await runShadowCommand(args);
     return;
   }
 

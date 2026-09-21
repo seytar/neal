@@ -219,6 +219,7 @@ export async function runCoderScopePhase(state: OrchestrationState, statePath: s
       progressMarkdownPath: state.progressMarkdownPath,
       sessionHandle: state.coderSessionHandle,
       coderSessionProtocol: state.coderSessionProtocol,
+      executionProfile: state.executionProfile,
       onSessionStarted: async (sessionHandle) => {
         state.coderSessionHandle = sessionHandle;
         state.coderSessionProtocol = activeCoderSessionProtocol;

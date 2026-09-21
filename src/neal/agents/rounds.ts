@@ -14,10 +14,12 @@ import { getCoderAdapter, getProviderDefinition, getStructuredAdvisorAdapter } f
 import { createProviderTelemetrySink } from '../providers/telemetry.js';
 import { isNealProviderError, NealProviderError } from '../providers/types.js';
 import type { StructuredJsonProtocolSpec } from '../providers/types.js';
+import { applyExecutionProfilePrompt, getExecutionCoderToolPolicy } from '../shadow-mode.js';
 import type {
   AgentRoleConfig,
   CoderSessionProtocol,
   ExecuteScopeProgressJustification,
+  ExecutionProfile,
   FinalCompletionPacket,
   FinalCompletionReviewerVerdict,
   FinalCompletionSummary,
@@ -609,6 +611,7 @@ export async function runCoderScopeRound(args: {
   progressMarkdownPath: string;
   sessionHandle?: string | null;
   coderSessionProtocol: CoderSessionProtocol | null;
+  executionProfile?: ExecutionProfile;
   onSessionStarted?: (sessionHandle: string) => void | Promise<void>;
   logger?: RunLogger;
 }): Promise<{
@@ -629,7 +632,10 @@ export async function runCoderScopeRound(args: {
     const { sessionHandle, structured } = await runCoderStructuredPrompt<CoderScopePayload>({
       coder: args.coder,
       cwd: args.cwd,
-      prompt: buildScopePrompt(args.planDoc, progressText),
+      prompt: applyExecutionProfilePrompt(
+        buildScopePrompt(args.planDoc, progressText),
+        args.executionProfile ?? 'normal',
+      ),
       schema,
       label: 'Coder scope round',
       structuredJsonProtocol: buildStructuredJsonProtocolSpec({
@@ -637,6 +643,7 @@ export async function runCoderScopeRound(args: {
         schema,
         validator: validateCoderScopePayload,
       }),
+      toolPolicy: getExecutionCoderToolPolicy(args.executionProfile ?? 'normal'),
       resumeHandle: args.sessionHandle,
       onSessionStarted: args.onSessionStarted,
       logger: args.logger,
@@ -676,8 +683,12 @@ export async function runCoderScopeRound(args: {
       run: (events, attempt) =>
         coder.runPrompt({
           cwd: args.cwd,
-          prompt: buildLegacyScopePrompt(args.planDoc, progressText),
+          prompt: applyExecutionProfilePrompt(
+            buildLegacyScopePrompt(args.planDoc, progressText),
+            args.executionProfile ?? 'normal',
+          ),
           ...getCoderRuntimeOptions(args.cwd),
+          toolPolicy: getExecutionCoderToolPolicy(args.executionProfile ?? 'normal'),
           resumeHandle: args.sessionHandle,
           // Guarded so an abandoned attempt's late session handle can never
           // overwrite a newer attempt's handle.
@@ -884,6 +895,7 @@ export async function runCoderResponseRound(args: {
   verificationHint: string;
   openFindings: Pick<ReviewFinding, 'id' | 'claim' | 'requiredAction' | 'severity' | 'files' | 'roundSummary'>[];
   mode?: 'blocking' | 'optional';
+  executionProfile?: ExecutionProfile;
   sessionHandle?: string | null;
   logger?: RunLogger;
 }): Promise<{ sessionHandle: string | null; payload: CoderResponsePayload }> {
@@ -893,13 +905,16 @@ export async function runCoderResponseRound(args: {
   const { sessionHandle, structured } = await runCoderStructuredPrompt<CoderResponsePayload>({
     coder: args.coder,
     cwd: args.cwd,
-    prompt: buildCoderResponsePrompt({
-      planDoc: args.planDoc,
-      progressText,
-      verificationHint: args.verificationHint,
-      openFindings: args.openFindings,
-      mode: args.mode,
-    }),
+    prompt: applyExecutionProfilePrompt(
+      buildCoderResponsePrompt({
+        planDoc: args.planDoc,
+        progressText,
+        verificationHint: args.verificationHint,
+        openFindings: args.openFindings,
+        mode: args.mode,
+      }),
+      args.executionProfile ?? 'normal',
+    ),
     schema,
     label: 'Coder response round',
     structuredJsonProtocol: buildStructuredJsonProtocolSpec({
@@ -907,6 +922,7 @@ export async function runCoderResponseRound(args: {
       schema,
       validator: validateCoderResponsePayload,
     }),
+    toolPolicy: getExecutionCoderToolPolicy(args.executionProfile ?? 'normal'),
     resumeHandle: args.sessionHandle,
     logger: args.logger,
   });
@@ -929,6 +945,7 @@ export async function runBlockedRecoveryCoderRound(args: {
   turnsTaken: number;
   terminalOnly?: boolean;
   allowReplacement?: boolean;
+  executionProfile?: ExecutionProfile;
   // Present only when the recovery phase found the top-level plan eligible for
   // a later-scope revision; `planDocument` is its text read at round start.
   laterScopeRevision?: {
@@ -955,24 +972,27 @@ export async function runBlockedRecoveryCoderRound(args: {
   const { sessionHandle, structured } = await runCoderStructuredPrompt<CoderBlockedRecoveryDispositionPayload>({
     coder: args.coder,
     cwd: args.cwd,
-    prompt: buildBlockedRecoveryCoderPrompt({
-      planDoc: args.planDoc,
-      progressText,
-      recoveryMarkdownPath: args.recoveryMarkdownPath,
-      blockedReason: args.blockedReason,
-      operatorGuidance: args.operatorGuidance,
-      maxTurns: args.maxTurns,
-      turnsTaken: args.turnsTaken,
-      terminalOnly: args.terminalOnly,
-      allowReplacement: args.allowReplacement,
-      laterScopeRevision: laterScopeRevision
-        ? {
-            topLevelPlanDoc: laterScopeRevision.topLevelPlanDoc,
-            currentScopeNumber: laterScopeRevision.currentScopeNumber,
-            scopeCount: laterScopeRevision.scopeCount,
-          }
-        : null,
-    }),
+    prompt: applyExecutionProfilePrompt(
+      buildBlockedRecoveryCoderPrompt({
+        planDoc: args.planDoc,
+        progressText,
+        recoveryMarkdownPath: args.recoveryMarkdownPath,
+        blockedReason: args.blockedReason,
+        operatorGuidance: args.operatorGuidance,
+        maxTurns: args.maxTurns,
+        turnsTaken: args.turnsTaken,
+        terminalOnly: args.terminalOnly,
+        allowReplacement: args.allowReplacement,
+        laterScopeRevision: laterScopeRevision
+          ? {
+              topLevelPlanDoc: laterScopeRevision.topLevelPlanDoc,
+              currentScopeNumber: laterScopeRevision.currentScopeNumber,
+              scopeCount: laterScopeRevision.scopeCount,
+            }
+          : null,
+      }),
+      args.executionProfile ?? 'normal',
+    ),
     schema,
     label: 'Coder blocked-recovery round',
     structuredJsonProtocol: buildStructuredJsonProtocolSpec({
@@ -980,6 +1000,7 @@ export async function runBlockedRecoveryCoderRound(args: {
       schema,
       validator,
     }),
+    toolPolicy: getExecutionCoderToolPolicy(args.executionProfile ?? 'normal'),
     resumeHandle: args.sessionHandle,
     logger: args.logger,
   });
