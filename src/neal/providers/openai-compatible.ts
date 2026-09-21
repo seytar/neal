@@ -581,6 +581,7 @@ type AgentLoopState = {
   modelSlug: string;
   tools: ToolSet;
   messages: ModelMessage[];
+  structuredOutputMode: NonNullable<OpenAICompatibleSettings['structuredOutputMode']>;
   toolCalls: Record<string, number>;
   toolErrors: Record<string, number>;
   steps: number;
@@ -744,11 +745,11 @@ async function runAgentToolLoop(ctx: AgentTurnContext, prompt: string): Promise<
 type AgentTurnOptions = {
   useTools: boolean;
   /**
-   * When set, the turn is a dedicated structured-output finalization turn:
-   * the `generateText` call carries `output: Output.object(...)` (which the
-   * SDK translates into the provider's `response_format` JSON-schema
-   * constraint) and no tools, and the parsed object is returned as
-   * `structuredOutput`. Mutually exclusive with `useTools: true`.
+   * When set, the turn is a dedicated JSON finalization turn. In
+   * json_schema mode the SDK receives Output.object(schema), so the transport
+   * enforces the schema. In json_object mode it receives Output.json(), so the
+   * transport guarantees valid JSON while Neal's protocol validator enforces
+   * the schema locally. No tools are exposed on either path.
    */
   structuredOutput?: { schema: Record<string, unknown>; schemaLabel: string };
 };
@@ -806,17 +807,15 @@ async function runAgentModelTurn(
     ...(ctx.label !== undefined ? { label: ctx.label } : {}),
     sessionHandle: ctx.sessionHandle,
   };
-  // The finalization schema is submitted as an SDK-native json_schema constraint.
-  // `@ai-sdk/openai-compatible` defaults strict: true, which requires every
-  // property to be in `required` and rejects an omitted optional property before
-  // the validator runs. For schemas that legitimately carry an optional property
-  // (the plan reviewer's findingClass, the consultant's
-  // targetCanonicalIds), disable strict mode on the request so the omitted
-  // property survives to the tolerant validator, which then applies its canonical
-  // default. The schema still rides as a json_schema constraint and the validator
-  // stays the real contract; all-required schemas keep strict enforcement.
+  // Only json_schema mode has transport-level schema enforcement. The
+  // openai-compatible SDK defaults strict JSON Schema to true, which rejects
+  // legitimately optional properties before Neal's tolerant validator can
+  // normalize them, so those schemas disable strict mode. json_object mode
+  // carries no schema to the transport and therefore needs no strict option.
   const relaxStrictJsonSchema =
-    turnOptions.structuredOutput !== undefined && schemaHasOptionalProperties(turnOptions.structuredOutput.schema);
+    ctx.state.structuredOutputMode === 'json_schema' &&
+    turnOptions.structuredOutput !== undefined &&
+    schemaHasOptionalProperties(turnOptions.structuredOutput.schema);
   let apiRetryCount = 0;
 
   while (true) {
@@ -831,7 +830,12 @@ async function runAgentModelTurn(
         messages: ctx.state.messages,
         ...(turnOptions.useTools ? { tools: ctx.state.tools } : {}),
         ...(turnOptions.structuredOutput
-          ? { output: Output.object({ schema: jsonSchema(turnOptions.structuredOutput.schema) }) }
+          ? {
+              output:
+                ctx.state.structuredOutputMode === 'json_object'
+                  ? Output.json()
+                  : Output.object({ schema: jsonSchema(turnOptions.structuredOutput.schema) }),
+            }
           : {}),
         ...(relaxStrictJsonSchema
           ? { providerOptions: { openaiCompatible: { strictJsonSchema: false } } }
@@ -947,13 +951,11 @@ async function runAgentModelTurn(
         ...(turnOptions.structuredOutput ? { structuredOutput: structuredOutputValue } : {}),
       };
     } catch (error) {
-      // Structured-output failure semantics (no repair): NoObjectGeneratedError
-      // is classified before generic normalization. An empty rejected text is
-      // the missing-content rule (a transport fault — embedded HTTP-200
-      // gateway errors, reasoning-only responses — so it stays retryable);
-      // any other rejected text is the model failing the structured-output
-      // contract: non-retryable `structured_output_missing` with the SDK
-      // error (and its `.text` excerpt) as the cause.
+      // JSON-output failure semantics (no repair): NoObjectGeneratedError
+      // covers parse/SDK output failures on both response-format modes. In
+      // json_schema mode the provider can also reject the schema itself; in
+      // json_object mode shape/type mismatches are handled later by Neal's
+      // protocol validator.
       let classified = error;
       // Content-safety refusal takes precedence over the structured-finalization
       // classification below: a refusal returned as an HTTP-400 finalization
@@ -997,6 +999,7 @@ async function runAgentModelTurn(
               });
       } else if (
         turnOptions.structuredOutput &&
+        ctx.state.structuredOutputMode === 'json_schema' &&
         typeof error === 'object' &&
         error !== null &&
         readStatusCode(error) === 400
@@ -1061,10 +1064,11 @@ async function runAgentModelTurn(
  * The dedicated SDK-native structured-output finalization turn, shared by the
  * coder and structured-advisor paths: appends one user message requesting the
  * final control payload, runs exactly one no-tools `runAgentModelTurn` with
- * `output: Output.object(...)`, validates the SDK-parsed object with the
- * protocol spec's validator (the single source of truth — the SDK schema is
- * transport-level enforcement of the same JSON schema object, not a parallel
- * contract), and emits `structured_output_received` on success.
+ * either Output.object(schema) or Output.json() according to the configured
+ * response-format capability, then validates the SDK-parsed JSON with the
+ * protocol spec's validator. The validator is always authoritative; json_schema
+ * additionally enforces the contract at the transport layer, while json_object
+ * guarantees JSON syntax only. Emits `structured_output_received` on success.
  *
  * Why a dedicated turn instead of constraining the tool loop itself:
  * - it preserves per-turn liveness granularity (each turn keeps its own
@@ -1339,6 +1343,7 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
       // object to update the cumulative per-tool telemetry maps.
       tools: undefined as unknown as ToolSet,
       messages: [],
+      structuredOutputMode: settings.structuredOutputMode,
       toolCalls: {},
       toolErrors: {},
       steps: 0,
@@ -1494,6 +1499,7 @@ class OpenAICompatibleStructuredAdvisorAdapter implements StructuredAdvisorAdapt
         // state object to update the cumulative per-tool telemetry maps.
         tools: undefined as unknown as ToolSet,
         messages: [],
+        structuredOutputMode: settings.structuredOutputMode,
         toolCalls: {},
         toolErrors: {},
         steps: 0,
