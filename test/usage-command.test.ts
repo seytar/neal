@@ -192,9 +192,12 @@ test('human usage output renders aligned columns and semantic roles without a mi
   assert.equal(snapshot.agentConfig.planner.provider, state.agentConfig.planner.provider);
   const rendered = renderHumanRunUsage(snapshot);
 
-  assert.match(rendered, /^Provider\s+Role\s+Turns\s+Input\s+Cache hit\s+Cache write\s+Output\s+Reasoning\s+Cost/m);
+  assert.match(rendered, /^Provider\s+Role\s+Turns\s+Input\s+Cache hit\s+Cache write\s+Output\s+Reasoning\s+Cost telemetry/m);
   assert.match(rendered, /anthropic-claude\s+planner\s+-\s+8\s+33,548\s+12,675\s+2,052/);
   assert.match(rendered, /openai-codex\s+reviewer:scope\s+-\s+439,668\s+409,856/);
+  assert.match(rendered, /Cost telemetry: \$0\.0814 \(partial: available for 1\/2 usage buckets\)/);
+  assert.match(rendered, /Cost telemetry is not account billing/);
+  assert.ok(rendered.indexOf('anthropic-claude') < rendered.indexOf('openai-codex'));
   assert.doesNotMatch(rendered, /\bTotal\b/);
   assert.doesNotMatch(rendered, /\| ---/);
 });

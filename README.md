@@ -399,8 +399,10 @@ telemetry directly from each run's `events.ndjson`. With no selector it uses
 the current run pointer; `--run latest` follows the same current-pointer
 semantics as other Neal commands, `--run <id>` selects one run, and `--all`
 aggregates every readable run in the repository. `--json` emits the same
-data in machine-readable form. Subscription quota percentages are provider
-account state and are not available through Neal.
+data in machine-readable form. Cost values are telemetry only: they may be
+provider-reported or rate-estimated and must not be interpreted as account
+billing. Subscription quota percentages and actual account charges remain
+provider-side state and are not available through Neal.
 
 `neal squash` rewrites a completed run into one commit. It previews the change
 and requires interactive confirmation before rewriting history.

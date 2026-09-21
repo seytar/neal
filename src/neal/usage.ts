@@ -209,16 +209,30 @@ export function aggregateUsageMetrics(inputs: UsageMetricsInput[]): UsageAggrega
     }
   }
 
+  const roleOrder = new Map<string, number>([
+    ['planner', 0],
+    ['coder', 1],
+    ['coder:final', 2],
+    ['reviewer:plan', 3],
+    ['reviewer:scope', 4],
+    ['reviewer:final', 5],
+  ]);
+
   const providers = [...buckets.values()].sort((left, right) => {
-    const turnOrder = right.turns - left.turns;
-    if (turnOrder !== 0) {
-      return turnOrder;
+    const leftRank = roleOrder.get(left.role) ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = roleOrder.get(right.role) ?? Number.MAX_SAFE_INTEGER;
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
     }
-    const providerOrder = left.provider.localeCompare(right.provider);
-    if (providerOrder !== 0) {
-      return providerOrder;
+    const roleComparison = left.role.localeCompare(right.role);
+    if (roleComparison !== 0) {
+      return roleComparison;
     }
-    return left.role.localeCompare(right.role);
+    const providerComparison = left.provider.localeCompare(right.provider);
+    if (providerComparison !== 0) {
+      return providerComparison;
+    }
+    return right.turns - left.turns;
   });
 
   return {
@@ -377,7 +391,7 @@ function renderTable(providers: UsageAggregateProviderSummary[]) {
       value: (provider) => formatNumber(provider.usage.reasoningOutputTokens),
     },
     {
-      header: 'Cost',
+      header: 'Cost telemetry',
       align: 'right',
       value: (provider) => formatCost(provider.costUsd, provider.costSource, provider.costCoverage),
     },
@@ -407,12 +421,12 @@ function renderTable(providers: UsageAggregateProviderSummary[]) {
 
 function renderCostSummary(summary: UsageAggregateSummary) {
   if (summary.totalCostUsd === null || summary.costCoverage === 'none') {
-    return 'Tracked cost: unknown';
+    return 'Cost telemetry: unavailable';
   }
   if (summary.costCoverage === 'partial') {
-    return `Tracked cost: $${summary.totalCostUsd.toFixed(4)} (partial: ${summary.pricedUsageSegments}/${summary.usageSegments} usage buckets priced)`;
+    return `Cost telemetry: $${summary.totalCostUsd.toFixed(4)} (partial: available for ${summary.pricedUsageSegments}/${summary.usageSegments} usage buckets)`;
   }
-  return `Tracked cost: $${summary.totalCostUsd.toFixed(4)}`;
+  return `Cost telemetry: $${summary.totalCostUsd.toFixed(4)}`;
 }
 
 function displayPath(cwd: string, path: string) {
@@ -440,10 +454,10 @@ export function renderHumanRunUsage(snapshot: NealRunUsageSnapshot) {
   ];
 
   if (aggregate.providers.some((provider) => provider.costSource === 'rate' || provider.costSource === 'mixed')) {
-    lines.push('', '* Rate-estimated cost; provider billing remains authoritative.');
+    lines.push('', '* Rate-estimated telemetry from published or configured token rates; provider billing remains authoritative.');
   }
   if (aggregate.providers.some((provider) => provider.costSource === 'mixed')) {
-    lines.push('† Mixed provider-reported and rate-estimated cost sources.');
+    lines.push('† Mixed provider-reported and rate-estimated telemetry sources.');
   }
   lines.push(
     '',
@@ -467,10 +481,10 @@ export function renderHumanAllUsage(snapshot: NealAllUsageSnapshot) {
   ];
 
   if (snapshot.totals.providers.some((provider) => provider.costSource === 'rate' || provider.costSource === 'mixed')) {
-    lines.push('', '* Rate-estimated cost; provider billing remains authoritative.');
+    lines.push('', '* Rate-estimated telemetry from published or configured token rates; provider billing remains authoritative.');
   }
   if (snapshot.totals.providers.some((provider) => provider.costSource === 'mixed')) {
-    lines.push('† Mixed provider-reported and rate-estimated cost sources.');
+    lines.push('† Mixed provider-reported and rate-estimated telemetry sources.');
   }
   lines.push(
     '',
