@@ -50,7 +50,7 @@ export type NealStatusSnapshot = {
   runDir: string;
   planDoc: string;
   topLevelMode: OrchestrationState['topLevelMode'];
-  executionProfile: OrchestrationState['executionProfile'];
+  executionProfile?: 'shadow';
   executionShape: OrchestrationState['executionShape'];
   phase: OrchestrationState['phase'];
   publicPhase: string;
@@ -236,7 +236,7 @@ export type NealStatusListRun = {
   statePath: string;
   planDoc: string;
   topLevelMode: OrchestrationState['topLevelMode'];
-  executionProfile: OrchestrationState['executionProfile'];
+  executionProfile?: 'shadow';
   executionShape: OrchestrationState['executionShape'];
   status: OrchestrationState['status'];
   effectiveStatus: EffectiveRunStatus;
@@ -416,7 +416,7 @@ export async function buildStatusSnapshot(args: {
     runDir: state.runDir,
     planDoc: state.planDoc,
     topLevelMode: state.topLevelMode,
-    executionProfile: state.executionProfile,
+    ...(state.executionProfile === 'shadow' ? { executionProfile: 'shadow' as const } : {}),
     executionShape: state.executionShape,
     phase: state.phase,
     publicPhase,
@@ -511,7 +511,7 @@ export async function buildStatusListSnapshot(args: {
         statePath: snapshot.statePath,
         planDoc: snapshot.planDoc,
         topLevelMode: snapshot.topLevelMode,
-        executionProfile: snapshot.executionProfile,
+        ...(snapshot.executionProfile === 'shadow' ? { executionProfile: 'shadow' as const } : {}),
         executionShape: snapshot.executionShape,
         status: snapshot.status,
         effectiveStatus: snapshot.effectiveStatus,
@@ -546,7 +546,7 @@ export function renderHumanStatusSnapshot(snapshot: NealStatusSnapshot): string 
     `- Run directory: ${snapshot.runDir}`,
     `- Plan: ${snapshot.planDoc}`,
     `- Mode: ${snapshot.topLevelMode}`,
-    `- Execution profile: ${snapshot.executionProfile}`,
+    ...(snapshot.executionProfile === 'shadow' ? ['- Execution profile: shadow'] : []),
     `- Status: ${snapshot.publicStatus}`,
     `- Step: ${snapshot.publicPhase}`,
   ];

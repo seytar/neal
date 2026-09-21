@@ -4,7 +4,10 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { assertAgentConfigSupportsShadowRun } from '../src/neal/providers/registry.js';
+import {
+  assertAgentConfigSupportsShadowRun,
+  assertAgentConfigSupportsWriterRun,
+} from '../src/neal/providers/registry.js';
 import {
   acceptShadowPrivateValidation,
   applyExecutionProfilePrompt,
@@ -20,6 +23,38 @@ test('shadow profile mechanically disables coder shell while normal mode is unch
   const shadow = applyExecutionProfilePrompt('implement', 'shadow');
   assert.match(shadow, /Shell\/command execution is mechanically disabled/);
   assert.match(shadow, /Do not claim runtime verification passed/);
+});
+
+test('Shadow does not pin planner or reviewer providers', () => {
+  const planners = ['openai-codex', 'anthropic-claude', 'openai-compatible'] as const;
+  const reviewers = ['openai-codex', 'anthropic-claude', 'openai-compatible'] as const;
+
+  for (const planner of planners) {
+    assert.doesNotThrow(() => assertAgentConfigSupportsShadowRun({
+      planner: { provider: planner, model: null },
+      coder: { provider: 'openai-compatible', model: null },
+      reviewer: { provider: 'openai-codex', model: null },
+    }));
+  }
+
+  for (const reviewer of reviewers) {
+    assert.doesNotThrow(() => assertAgentConfigSupportsShadowRun({
+      planner: { provider: 'openai-codex', model: null },
+      coder: { provider: 'anthropic-claude', model: null },
+      reviewer: { provider: reviewer, model: null },
+    }));
+  }
+});
+
+test('normal writer mode keeps providers that are not Shadow-shell-disable capable', () => {
+  const config = {
+    planner: { provider: 'openai-codex' as const, model: null },
+    coder: { provider: 'openai-codex' as const, model: null },
+    reviewer: { provider: 'anthropic-claude' as const, model: null },
+  };
+
+  assert.doesNotThrow(() => assertAgentConfigSupportsWriterRun(config));
+  assert.throws(() => assertAgentConfigSupportsShadowRun(config), /missing shell disable/);
 });
 
 test('shadow capability accepts shell-disable coders and rejects Codex coder', () => {

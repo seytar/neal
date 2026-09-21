@@ -414,7 +414,7 @@ export function renderFinalRunOutput(
     `- Run: ${runId}`,
     `- Plan: ${finalState.planDoc}`,
     `- Mode: ${finalState.topLevelMode}`,
-    `- Execution profile: ${finalState.executionProfile}`,
+    ...(finalState.executionProfile === 'shadow' ? ['- Execution profile: shadow'] : []),
     `- Status: ${publicStatus}`,
     `- Step: ${formatPublicPhase(finalState.phase)}`,
     `- Persisted status: ${finalState.status}`,

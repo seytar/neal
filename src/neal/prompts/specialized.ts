@@ -87,7 +87,7 @@ export function buildFinalCompletionSummaryPrompt(args: {
     'Whole-plan completion packet:',
     JSON.stringify(
       {
-        executionProfile: args.packet.executionProfile,
+        ...(args.packet.executionProfile === 'shadow' ? { executionProfile: 'shadow' as const } : {}),
         executionShape: args.packet.executionShape,
         currentScopeLabel: args.packet.currentScopeLabel,
         acceptedScopeRecordCount: args.packet.acceptedScopeCount,

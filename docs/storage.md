@@ -21,8 +21,9 @@ The single-run JSON is the authoritative read model for wrappers that already
 know a run id. Important stable fields include:
 
 - `runId`, `status`, `effectiveStatus`, `publicStatus`, `phase`,
-  `publicPhase`, `executionProfile`, and `nextAction` for classification
-  and follow-up.
+  `publicPhase`, and `nextAction` for classification and follow-up. Shadow
+  snapshots additionally expose `executionProfile: "shadow"`; normal snapshots
+  omit the field to preserve the pre-Shadow automation surface.
 - `waitingForOperatorGuidance`, `pendingOperatorGuidance`, `blocker`,
   `manualGate`, `resumeDecision`, `health`, and `lock` for blocked, waiting,
   paused, timed-out, live-lock, stale-lock, and manually gated states.
