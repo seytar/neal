@@ -90,7 +90,7 @@ test('usage run snapshot reads live events and latest follows the current run po
   assert.equal(snapshot.metrics.providers[0]?.usage.cachedInputTokens, 200);
   assert.equal(snapshot.metrics.providers[0]?.usage.outputTokens, 100);
   const rendered = renderHumanRunUsage(snapshot);
-  assert.match(rendered, /openai-compatible \/ coder/);
+  assert.match(rendered, /openai-compatible\s+coder/);
   assert.match(rendered, /1,000/);
   assert.match(rendered, /\$0\.0010\*/);
 });
