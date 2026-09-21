@@ -776,6 +776,14 @@ export function assertValidOrchestrationState(
     throwStateInvariant(context, 'coderSessionProtocol', 'must be null when coderSessionHandle is null');
   }
 
+  assertSafeIntegerAtLeast(state.privateValidationFeedbackCount, 'privateValidationFeedbackCount', 0, context);
+  if (state.privateValidationFeedbackCount === 0 && state.privateValidationFeedbackPath !== null) {
+    throwStateInvariant(context, 'privateValidationFeedbackPath', 'must be null before any private validation feedback is recorded');
+  }
+  if (state.privateValidationFeedbackCount > 0 && state.privateValidationFeedbackPath === null) {
+    throwStateInvariant(context, 'privateValidationFeedbackPath', 'must identify the latest private validation feedback artifact');
+  }
+
   if (state.executionProfile === 'shadow' && state.topLevelMode !== 'execute') {
     throwStateInvariant(context, 'executionProfile', 'shadow profile is only valid for execute-mode runs');
   }

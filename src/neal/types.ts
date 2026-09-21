@@ -444,6 +444,8 @@ export type OrchestrationState = {
   autoSquashOnCompletion: boolean;
   privateValidationAcceptedAt: string | null;
   privateValidationNote: string | null;
+  privateValidationFeedbackCount: number;
+  privateValidationFeedbackPath: string | null;
   progressJsonPath: string;
   progressMarkdownPath: string;
   recoveryMarkdownPath: string;
