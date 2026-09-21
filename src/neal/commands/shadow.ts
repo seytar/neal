@@ -6,11 +6,10 @@ import { writeTextAtomic } from '../atomic-write.js';
 import { assertGitRepositoryWithCommit } from '../git.js';
 import { RunLogger } from '../logger.js';
 import { writeExecutionArtifacts } from '../orchestrator/artifacts.js';
-import { createNextScopeEntryReset } from '../orchestrator/transitions.js';
 import { assertAgentConfigSupportsShadowRun } from '../providers/registry.js';
 import { writeCheckpointRetrospective } from '../retrospective.js';
 import { acquireActiveRunLock } from '../run-lock.js';
-import { shouldAdvanceTopLevelScopeNumber } from '../scopes.js';
+import { acceptShadowPrivateValidation, reopenShadowRunFromPrivateFeedback } from '../shadow-mode.js';
 import { saveState } from '../state.js';
 import { runNewRunCommand } from './new-run.js';
 import { executeRun, resolveWriterRunSelection, withActiveRunLock } from './runtime.js';
@@ -129,34 +128,10 @@ async function processPrivateValidationFeedback(args: string[]) {
       ].join('\n'),
     );
 
-    const reopened = await saveState(selection.statePath, {
-      ...state,
-      ...createNextScopeEntryReset(state.finalCommit),
-      currentScopeNumber: shouldAdvanceTopLevelScopeNumber(state)
-        ? state.currentScopeNumber + 1
-        : state.currentScopeNumber,
-      coderRetryCount: 0,
-      splitPlanCountForCurrentScope: 0,
-      finalCompletionReviewVerdict: {
-        action: 'continue_execution',
-        summary: 'Private validation reported a failure that requires corrective work.',
-        rationale: 'The operator supplied sanitized evidence from private validation after static acceptance.',
-        missingWork: {
-          summary: feedback,
-          requiredOutcome: 'Resolve the sanitized private-validation failure without assuming access to the private source tree.',
-          verification: 'Return to static acceptance, then require the operator to run private validation again.',
-        },
-        squashCommitMessage: null,
-      },
-      finalCompletionResolvedAction: 'continue_execution',
-      finalCompletionContinueExecutionCapReached: false,
-      privateValidationAcceptedAt: null,
-      privateValidationNote: null,
-      privateValidationFeedbackCount: feedbackNumber,
-      privateValidationFeedbackPath: feedbackPath,
-      blockedFromPhase: null,
-      blockerReason: null,
-    });
+    const reopened = await saveState(
+      selection.statePath,
+      reopenShadowRunFromPrivateFeedback(state, feedback, feedbackPath),
+    );
 
     await writeExecutionArtifacts(reopened);
     const logger = new RunLogger(state.runDir);
@@ -199,13 +174,10 @@ async function acceptPrivateValidation(args: string[]) {
   }
 
   await withActiveRunLock(lock, async () => {
-    const accepted = await saveState(selection.statePath, {
-      ...state,
-      phase: 'done',
-      status: 'done',
-      privateValidationAcceptedAt: new Date().toISOString(),
-      privateValidationNote: parsed.note,
-    });
+    const accepted = await saveState(
+      selection.statePath,
+      acceptShadowPrivateValidation(state, parsed.note, new Date().toISOString()),
+    );
     await writeExecutionArtifacts(accepted);
     await writeCheckpointRetrospective(accepted, 'done');
     process.stdout.write(
