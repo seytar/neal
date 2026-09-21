@@ -17,7 +17,6 @@ Do not contradict yourself:
 
 Whole-plan completion packet:
 {
-  "executionProfile": "normal",
   "executionShape": "multi_scope",
   "currentScopeLabel": "6",
   "acceptedScopeRecordCount": 5,
