@@ -151,10 +151,85 @@ test('usage --all aggregation sums run metrics without double-counting turn_comp
   assert.doesNotMatch(rendered, /99\.0000/);
 });
 
+
+test('human usage output renders aligned columns and semantic roles without a misleading total column', async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), 'neal-usage-pretty-'));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+
+  const state = await createRun(cwd, 'run-pretty', [
+    event('2026-09-21T12:00:00.000Z', 'provider.usage_reported', {
+      provider: 'anthropic-claude',
+      role: 'coder',
+      label: 'Planner plan round',
+      usage: {
+        input_tokens: 8,
+        cache_creation_input_tokens: 12_675,
+        cache_read_input_tokens: 33_548,
+        output_tokens: 2_052,
+      },
+      costUsd: 0.0814,
+      costSource: 'provider',
+    }),
+    event('2026-09-21T12:00:01.000Z', 'provider.usage_reported', {
+      provider: 'openai-codex',
+      role: 'structured-advisor',
+      label: 'review',
+      usage: {
+        inputTokens: { total: 439_668, cacheRead: 409_856 },
+        outputTokens: { total: 3_008, reasoning: 1_252 },
+      },
+    }),
+  ], (initial) => ({
+    ...initial,
+    agentConfig: {
+      ...initial.agentConfig,
+      planner: { provider: 'anthropic-claude', model: null },
+      reviewer: { provider: 'openai-codex', model: null },
+    },
+  }));
+
+  const snapshot = await buildRunUsageSnapshot({ cwd, runId: 'run-pretty' });
+  assert.equal(snapshot.agentConfig.planner.provider, state.agentConfig.planner.provider);
+  const rendered = renderHumanRunUsage(snapshot);
+
+  assert.match(rendered, /^Provider\s+Role\s+Turns\s+Input\s+Cache hit\s+Cache write\s+Output\s+Reasoning\s+Cost/m);
+  assert.match(rendered, /anthropic-claude\s+planner\s+-\s+8\s+33,548\s+12,675\s+2,052/);
+  assert.match(rendered, /openai-codex\s+reviewer:scope\s+-\s+439,668\s+409,856/);
+  assert.doesNotMatch(rendered, /\bTotal\b/);
+  assert.doesNotMatch(rendered, /\| ---/);
+});
+
+test('ambiguous same-provider finalization keeps the internal role instead of inventing a semantic role', async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), 'neal-usage-ambiguous-role-'));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+
+  await createRun(cwd, 'run-ambiguous', [
+    event('2026-09-21T12:00:00.000Z', 'provider.usage_reported', {
+      provider: 'openai-compatible',
+      role: 'structured-advisor',
+      label: 'final-completion',
+      usage: { input_tokens: 10, output_tokens: 2 },
+    }),
+  ], (initial) => ({
+    ...initial,
+    agentConfig: {
+      ...initial.agentConfig,
+      coder: { provider: 'openai-compatible', model: 'same' },
+      reviewer: { provider: 'openai-compatible', model: 'same' },
+    },
+  }));
+
+  const rendered = renderHumanRunUsage(
+    await buildRunUsageSnapshot({ cwd, runId: 'run-ambiguous' }),
+  );
+  assert.match(rendered, /structured-advisor:final-completion/);
+});
+
 test('aggregateUsageMetrics preserves unknown cost instead of inventing dollars', () => {
   const aggregate = aggregateUsageMetrics([
     {
-      observedStartedAt: null,
+      metrics: {
+        observedStartedAt: null,
       observedCompletedAt: null,
       observedDurationMs: null,
       providerTurns: 1,
@@ -184,8 +259,9 @@ test('aggregateUsageMetrics preserves unknown cost instead of inventing dollars'
           costSource: null,
         },
       ],
-      totalCostUsd: null,
-      costCoverage: 'none',
+        totalCostUsd: null,
+        costCoverage: 'none',
+      },
     },
   ]);
 

@@ -9,7 +9,7 @@ import {
   type RunUsageTotals,
 } from './run-metrics.js';
 import { loadState } from './state.js';
-import type { OrchestrationState } from './types.js';
+import type { AgentConfig, OrchestrationState } from './types.js';
 import type { RunEvent } from './verification-events.js';
 
 export type UsageCostCoverage = 'complete' | 'partial' | 'none';
@@ -46,6 +46,7 @@ export type NealRunUsageSnapshot = {
   executionProfile: OrchestrationState['executionProfile'];
   status: OrchestrationState['status'];
   phase: OrchestrationState['phase'];
+  agentConfig: AgentConfig;
   events: {
     path: string;
     parsedLines: number;
@@ -87,8 +88,57 @@ function addUsage(target: RunUsageTotals, source: RunUsageTotals) {
   target.totalTokens += source.totalTokens;
 }
 
-function aggregateProviderKey(provider: RunMetricProviderSummary) {
-  return `${provider.provider}\0${provider.role}\0${provider.label ?? ''}`;
+type UsageMetricsInput = {
+  metrics: RunMetricsSummary;
+  agentConfig?: AgentConfig | null;
+};
+
+function configuredRolesForProvider(agentConfig: AgentConfig | null | undefined, provider: string) {
+  if (!agentConfig) {
+    return [];
+  }
+  return (['planner', 'coder', 'reviewer'] as const).filter(
+    (role) => agentConfig[role].provider === provider,
+  );
+}
+
+function semanticRole(
+  provider: RunMetricProviderSummary,
+  agentConfig: AgentConfig | null | undefined,
+) {
+  const label = provider.label?.trim() ?? '';
+  if (/^Planner\b/i.test(label)) {
+    return 'planner';
+  }
+  if (/^Coder\b/i.test(label)) {
+    return 'coder';
+  }
+  if (label === 'plan-review') {
+    return 'reviewer:plan';
+  }
+  if (label === 'review') {
+    return 'reviewer:scope';
+  }
+
+  const configured = configuredRolesForProvider(agentConfig, provider.provider);
+  if (label === 'final-completion') {
+    if (configured.length === 1 && configured[0] === 'reviewer') {
+      return 'reviewer:final';
+    }
+    if (configured.length === 1 && configured[0] === 'coder') {
+      return 'coder:final';
+    }
+  }
+
+  if (configured.length === 1) {
+    return configured[0];
+  }
+
+  return provider.label ? `${provider.role}:${provider.label}` : provider.role;
+}
+
+function aggregateProviderKey(provider: RunMetricProviderSummary, role: string) {
+  return `${provider.provider}\0${role}`;
 }
 
 function mergeCostSource(
@@ -111,20 +161,21 @@ function coverage(priced: number, total: number): UsageCostCoverage {
   return priced === total ? 'complete' : 'partial';
 }
 
-export function aggregateUsageMetrics(metrics: RunMetricsSummary[]): UsageAggregateSummary {
+export function aggregateUsageMetrics(inputs: UsageMetricsInput[]): UsageAggregateSummary {
   const buckets = new Map<string, UsageAggregateProviderSummary>();
   let totalCost = 0;
   let hasCost = false;
   let usageSegments = 0;
   let pricedUsageSegments = 0;
 
-  for (const runMetrics of metrics) {
-    for (const provider of runMetrics.providers) {
-      const key = aggregateProviderKey(provider);
+  for (const input of inputs) {
+    for (const provider of input.metrics.providers) {
+      const role = semanticRole(provider, input.agentConfig);
+      const key = aggregateProviderKey(provider, role);
       const existing = buckets.get(key) ?? {
         provider: provider.provider,
-        role: provider.role,
-        label: provider.label,
+        role,
+        label: null,
         turns: 0,
         usage: { ...EMPTY_USAGE },
         costUsd: null,
@@ -227,6 +278,7 @@ async function buildRunSnapshotFromStatePath(cwd: string, statePath: string): Pr
     executionProfile: state.executionProfile,
     status: state.status,
     phase: state.phase,
+    agentConfig: state.agentConfig,
     events: {
       path: loaded.path,
       parsedLines: loaded.parsedLines,
@@ -261,16 +313,17 @@ export async function buildAllUsageSnapshot(args: {
     cwd,
     runCount: snapshots.length,
     runs: snapshots,
-    totals: aggregateUsageMetrics(snapshots.map((snapshot) => snapshot.metrics)),
+    totals: aggregateUsageMetrics(
+      snapshots.map((snapshot) => ({
+        metrics: snapshot.metrics,
+        agentConfig: snapshot.agentConfig,
+      })),
+    ),
   };
 }
 
 function formatNumber(value: number) {
   return value === 0 ? '-' : value.toLocaleString('en-US');
-}
-
-function effectiveTotalTokens(usage: RunUsageTotals) {
-  return usage.totalTokens > 0 ? usage.totalTokens : usage.inputTokens + usage.outputTokens;
 }
 
 function formatCost(
@@ -286,12 +339,14 @@ function formatCost(
   return `$${value.toFixed(4)}${suffix}${partial}`;
 }
 
-function providerDisplay(provider: {
-  provider: string;
-  role: string;
-  label: string | null;
-}) {
-  return `${provider.provider} / ${provider.role}${provider.label ? `:${provider.label}` : ''}`;
+type TableColumn = {
+  header: string;
+  align: 'left' | 'right';
+  value: (provider: UsageAggregateProviderSummary) => string;
+};
+
+function padCell(value: string, width: number, align: TableColumn['align']) {
+  return align === 'right' ? value.padStart(width) : value.padEnd(width);
 }
 
 function renderTable(providers: UsageAggregateProviderSummary[]) {
@@ -299,24 +354,65 @@ function renderTable(providers: UsageAggregateProviderSummary[]) {
     return ['No provider usage events recorded.'];
   }
 
-  return [
-    '| Provider / role | Turns | Input | Cached | Cache write | Cache read | Output | Reasoning | Total | Cost |',
-    '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
-    ...providers.map((provider) => {
-      const usage = provider.usage;
-      return `| ${providerDisplay(provider)} | ${provider.turns} | ${formatNumber(usage.inputTokens)} | ${formatNumber(usage.cachedInputTokens)} | ${formatNumber(usage.cacheCreationInputTokens)} | ${formatNumber(usage.cacheReadInputTokens)} | ${formatNumber(usage.outputTokens)} | ${formatNumber(usage.reasoningOutputTokens)} | ${formatNumber(effectiveTotalTokens(usage))} | ${formatCost(provider.costUsd, provider.costSource, provider.costCoverage)} |`;
-    }),
+  const columns: TableColumn[] = [
+    { header: 'Provider', align: 'left', value: (provider) => provider.provider },
+    { header: 'Role', align: 'left', value: (provider) => provider.role },
+    { header: 'Turns', align: 'right', value: (provider) => formatNumber(provider.turns) },
+    { header: 'Input', align: 'right', value: (provider) => formatNumber(provider.usage.inputTokens) },
+    {
+      header: 'Cache hit',
+      align: 'right',
+      value: (provider) =>
+        formatNumber(provider.usage.cachedInputTokens + provider.usage.cacheReadInputTokens),
+    },
+    {
+      header: 'Cache write',
+      align: 'right',
+      value: (provider) => formatNumber(provider.usage.cacheCreationInputTokens),
+    },
+    { header: 'Output', align: 'right', value: (provider) => formatNumber(provider.usage.outputTokens) },
+    {
+      header: 'Reasoning',
+      align: 'right',
+      value: (provider) => formatNumber(provider.usage.reasoningOutputTokens),
+    },
+    {
+      header: 'Cost',
+      align: 'right',
+      value: (provider) => formatCost(provider.costUsd, provider.costSource, provider.costCoverage),
+    },
   ];
+
+  const rows = providers.map((provider) => columns.map((column) => column.value(provider)));
+  const widths = columns.map((column, columnIndex) =>
+    Math.max(
+      column.header.length,
+      ...rows.map((row) => row[columnIndex]?.length ?? 0),
+    ),
+  );
+  const separator = widths.map((width) => '-'.repeat(width)).join('  ');
+  const header = columns
+    .map((column, index) => padCell(column.header, widths[index] ?? 0, column.align))
+    .join('  ');
+  const body = rows.map((row) =>
+    row
+      .map((value, index) =>
+        padCell(value ?? '', widths[index] ?? 0, columns[index]?.align ?? 'left'),
+      )
+      .join('  '),
+  );
+
+  return [header, separator, ...body];
 }
 
 function renderCostSummary(summary: UsageAggregateSummary) {
   if (summary.totalCostUsd === null || summary.costCoverage === 'none') {
-    return 'Estimated cost: unknown';
+    return 'Tracked cost: unknown';
   }
   if (summary.costCoverage === 'partial') {
-    return `Estimated cost (partial, ${summary.pricedUsageSegments}/${summary.usageSegments} usage buckets priced): $${summary.totalCostUsd.toFixed(4)}`;
+    return `Tracked cost: $${summary.totalCostUsd.toFixed(4)} (partial: ${summary.pricedUsageSegments}/${summary.usageSegments} usage buckets priced)`;
   }
-  return `Estimated cost: $${summary.totalCostUsd.toFixed(4)}`;
+  return `Tracked cost: $${summary.totalCostUsd.toFixed(4)}`;
 }
 
 function displayPath(cwd: string, path: string) {
@@ -328,7 +424,9 @@ function displayPath(cwd: string, path: string) {
 }
 
 export function renderHumanRunUsage(snapshot: NealRunUsageSnapshot) {
-  const aggregate = aggregateUsageMetrics([snapshot.metrics]);
+  const aggregate = aggregateUsageMetrics([
+    { metrics: snapshot.metrics, agentConfig: snapshot.agentConfig },
+  ]);
   const lines = [
     '# Neal Usage',
     '',
@@ -347,6 +445,10 @@ export function renderHumanRunUsage(snapshot: NealRunUsageSnapshot) {
   if (aggregate.providers.some((provider) => provider.costSource === 'mixed')) {
     lines.push('† Mixed provider-reported and rate-estimated cost sources.');
   }
+  lines.push(
+    '',
+    'Note: Input/cache accounting follows each provider\'s reported semantics; cache hits are not directly comparable as billable input across providers.',
+  );
   if (snapshot.events.malformedLines > 0) {
     lines.push('', `Warning: ignored ${snapshot.events.malformedLines} malformed events.ndjson line(s).`);
   }
@@ -370,6 +472,10 @@ export function renderHumanAllUsage(snapshot: NealAllUsageSnapshot) {
   if (snapshot.totals.providers.some((provider) => provider.costSource === 'mixed')) {
     lines.push('† Mixed provider-reported and rate-estimated cost sources.');
   }
+  lines.push(
+    '',
+    'Note: Input/cache accounting follows each provider\'s reported semantics; cache hits are not directly comparable as billable input across providers.',
+  );
   const malformed = snapshot.runs.reduce((sum, run) => sum + run.events.malformedLines, 0);
   if (malformed > 0) {
     lines.push('', `Warning: ignored ${malformed} malformed events.ndjson line(s) across selected runs.`);
