@@ -28,6 +28,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Generate compatibility prompt golden
+        run: pnpm exec tsx scripts/generate-shadow-prompt-goldens.mts
+
+      - name: Upload compatibility prompt golden
+        uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-prompt-golden
+          path: tmp/shadow-prompt-goldens
+
       - name: Typecheck
         run: pnpm typecheck
 
