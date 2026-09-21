@@ -122,6 +122,7 @@ export async function initializeOrchestration(
     allowedDirtyPaths?: string[];
     runDir?: string;
     autoSquashOnCompletion?: boolean;
+    executionProfile?: OrchestrationState['executionProfile'];
     inheritedPlanReviewDebt?: ResidualReviewDebtItem[];
   },
 ) {
@@ -144,6 +145,7 @@ export async function initializeOrchestration(
     stateDir,
     runDir: logger.runDir,
     topLevelMode,
+    executionProfile: options?.executionProfile ?? 'normal',
     allowedDirtyPaths: options?.allowedDirtyPaths ?? [],
     agentConfig,
     autoSquashOnCompletion: options?.autoSquashOnCompletion ?? true,
@@ -169,6 +171,7 @@ export async function initializeOrchestration(
     statePath,
     baseCommit,
     topLevelMode,
+    executionProfile: savedState.executionProfile,
     planDocBackupPath,
     agentConfig: savedState.agentConfig,
     reviewMarkdownPath: savedState.reviewMarkdownPath,
@@ -261,6 +264,7 @@ export async function loadOrInitialize(
     allowedDirtyPaths?: string[];
     runDir?: string;
     autoSquashOnCompletion?: boolean;
+    executionProfile?: OrchestrationState['executionProfile'];
     inheritedPlanReviewDebt?: ResidualReviewDebtItem[];
   },
 ) {
@@ -310,6 +314,7 @@ export async function initializeNewRun(
     allowedDirtyPaths?: string[];
     runDir?: string;
     autoSquashOnCompletion?: boolean;
+    executionProfile?: OrchestrationState['executionProfile'];
     inheritedPlanReviewDebt?: ResidualReviewDebtItem[];
   },
 ) {

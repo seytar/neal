@@ -32,6 +32,7 @@ export const ORCHESTRATION_PHASES = [
   'interactive_blocked_recovery',
   EXECUTE_FINALIZATION_PHASE,
   'final_completion_review',
+  'awaiting_private_validation',
   'done',
   'blocked',
 ] as const satisfies readonly OrchestrationPhase[];
@@ -773,6 +774,26 @@ export function assertValidOrchestrationState(
   }
   if (state.coderSessionHandle === null && state.coderSessionProtocol !== null) {
     throwStateInvariant(context, 'coderSessionProtocol', 'must be null when coderSessionHandle is null');
+  }
+
+  if (state.executionProfile === 'shadow' && state.topLevelMode !== 'execute') {
+    throwStateInvariant(context, 'executionProfile', 'shadow profile is only valid for execute-mode runs');
+  }
+
+  if (state.phase === 'awaiting_private_validation') {
+    if (state.executionProfile !== 'shadow') {
+      throwStateInvariant(context, 'executionProfile', 'awaiting_private_validation requires shadow profile');
+    }
+    if (state.status !== 'paused') {
+      throwStateInvariant(context, 'status', 'awaiting_private_validation requires paused status');
+    }
+    if (state.privateValidationAcceptedAt !== null) {
+      throwStateInvariant(context, 'privateValidationAcceptedAt', 'must be null while private validation is pending');
+    }
+  }
+
+  if (state.executionProfile === 'shadow' && state.status === 'done' && state.privateValidationAcceptedAt === null) {
+    throwStateInvariant(context, 'privateValidationAcceptedAt', 'shadow runs may become done only after private validation is accepted');
   }
 
   if (state.phase === 'done' && state.status !== 'done') {
