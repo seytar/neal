@@ -461,7 +461,7 @@ export function renderHumanRunUsage(snapshot: NealRunUsageSnapshot) {
   }
   lines.push(
     '',
-    'Note: Input/cache accounting follows each provider\'s reported semantics; cache hits are not directly comparable as billable input across providers.',
+    'Note: Cost telemetry is not account billing; subscription quotas and charges remain provider-side. Input/cache fields follow each provider\'s reported semantics, so cache hits are not directly comparable across providers.',
   );
   if (snapshot.events.malformedLines > 0) {
     lines.push('', `Warning: ignored ${snapshot.events.malformedLines} malformed events.ndjson line(s).`);
@@ -488,7 +488,7 @@ export function renderHumanAllUsage(snapshot: NealAllUsageSnapshot) {
   }
   lines.push(
     '',
-    'Note: Input/cache accounting follows each provider\'s reported semantics; cache hits are not directly comparable as billable input across providers.',
+    'Note: Cost telemetry is not account billing; subscription quotas and charges remain provider-side. Input/cache fields follow each provider\'s reported semantics, so cache hits are not directly comparable across providers.',
   );
   const malformed = snapshot.runs.reduce((sum, run) => sum + run.events.malformedLines, 0);
   if (malformed > 0) {
