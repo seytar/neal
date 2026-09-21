@@ -838,18 +838,18 @@ const AXIS_CONFORMANCE: AxisConformanceCase[] = [
   },
   // buildFinalCompletionReviewerPrompt access submodes (aggregate range available)
   {
-    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#reviewLevel=moderate',
-    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#reviewLevel=moderate',
+    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
+    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
     sentinel: GIT_COMMANDS_SENTINEL,
   },
   {
-    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-inlined#aggregateRange=available#reviewLevel=moderate',
-    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#reviewLevel=moderate',
+    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-inlined#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
+    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
     sentinel: INLINED_RANGE_DIFF_SENTINEL,
   },
   {
-    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#reviewLevel=moderate',
-    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-inlined#aggregateRange=available#reviewLevel=moderate',
+    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
+    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-inlined#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
     sentinel: GIT_DIFF_TOOL_SENTINEL,
   },
   // buildPlanReviewerPrompt access modes: tool-access vs read-only
@@ -881,13 +881,13 @@ const AXIS_CONFORMANCE: AxisConformanceCase[] = [
   // the range-anchored falsification line; unavailable has no resolved range so
   // that line is absent.
   {
-    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#reviewLevel=moderate',
-    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=unavailable#reviewLevel=moderate',
+    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
+    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=unavailable#executionProfile=normal#reviewLevel=moderate',
     sentinel: 'Review that aggregate range base000..head000 directly with repository tools',
   },
   {
-    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#reviewLevel=moderate',
-    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=unavailable#reviewLevel=moderate',
+    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
+    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=unavailable#executionProfile=normal#reviewLevel=moderate',
     sentinel: 'Review that aggregate range base000..head000 directly with your read-only repository tools',
   },
   // reviewLevel on buildReviewerPrompt: each level renders its own calibration
@@ -912,20 +912,31 @@ const AXIS_CONFORMANCE: AxisConformanceCase[] = [
     withoutKey: 'buildReviewerPrompt#accessMode=tool-access#earlierScopeChanges=absent#previousHead=present#reviewLevel=moderate',
     sentinel: LENIENT_FINDING_QUALITY_SENTINEL,
   },
+  // executionProfile on the two final-completion prompt surfaces.
+  {
+    withKey: 'buildFinalCompletionSummaryPrompt#executionProfile=shadow',
+    withoutKey: 'buildFinalCompletionSummaryPrompt#executionProfile=normal',
+    sentinel: 'Shadow mode is active: shell execution was intentionally disabled during implementation.',
+  },
+  {
+    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#executionProfile=shadow#reviewLevel=moderate',
+    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
+    sentinel: 'Shadow mode is active. Perform static cross-scope reasoning',
+  },
   // reviewLevel on buildFinalCompletionReviewerPrompt.
   {
-    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#reviewLevel=strict',
-    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#reviewLevel=moderate',
+    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#executionProfile=normal#reviewLevel=strict',
+    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
     sentinel: STRICT_LEVEL_SENTINEL,
   },
   {
-    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#reviewLevel=moderate',
-    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#reviewLevel=lenient',
+    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
+    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#executionProfile=normal#reviewLevel=lenient',
     sentinel: MODERATE_LEVEL_SENTINEL,
   },
   {
-    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=unavailable#reviewLevel=lenient',
-    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=unavailable#reviewLevel=strict',
+    withKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=unavailable#executionProfile=normal#reviewLevel=lenient',
+    withoutKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=unavailable#executionProfile=normal#reviewLevel=strict',
     sentinel: LENIENT_LEVEL_SENTINEL,
   },
 ];
@@ -1035,10 +1046,10 @@ function registerTests(): void {
 
     // completion reviewer: same tool-access continuity framing everywhere.
     const complToolAccess = cellRenderByKey(
-      'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#reviewLevel=moderate',
+      'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
     );
     const complReadOnly = cellRenderByKey(
-      'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#reviewLevel=moderate',
+      'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#executionProfile=normal#reviewLevel=moderate',
     );
     for (const render of [complToolAccess, complReadOnly]) {
       assert.ok(render.includes('Inspect cited artifacts'));
@@ -1094,12 +1105,14 @@ function registerTests(): void {
       'buildBlockedRecoveryCoderPrompt#allowLaterScopeRevision=true#allowReplacement=true#terminalOnly=false',
       'buildReviewerPrompt#accessMode=read-only-inlined#earlierScopeChanges=absent#previousHead=present#reviewLevel=moderate',
       'buildReviewerPrompt#accessMode=read-only-tool#earlierScopeChanges=absent#previousHead=present#reviewLevel=moderate',
-      // New authored axes (R2-F1): planDocument, planReviewGuidance, aggregate-range.
+      // New authored axes: planDocument, planReviewGuidance, aggregate-range, executionProfile.
       'buildPlanningPrompt#authoredOneShot=false#planDocument=present',
+      'buildFinalCompletionSummaryPrompt#executionProfile=shadow',
+      'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#executionProfile=shadow#reviewLevel=moderate',
       'buildCoderPlanResponsePrompt#mode=blocking#planReviewGuidance=present#reviewMode=plan',
-      'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=unavailable#reviewLevel=moderate',
+      'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=unavailable#executionProfile=normal#reviewLevel=moderate',
       'buildReviewerPrompt#accessMode=tool-access#earlierScopeChanges=absent#previousHead=present#reviewLevel=lenient',
-      'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#reviewLevel=strict',
+      'buildFinalCompletionReviewerPrompt#accessMode=tool-access#aggregateRange=available#executionProfile=normal#reviewLevel=strict',
     ];
     for (const key of perturbedKeys) {
       const { specId, cells } = findCell(key);
