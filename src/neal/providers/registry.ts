@@ -23,6 +23,7 @@ type ProviderCapabilityName =
   | 'read_tool_access'
   | 'write_tool_access'
   | 'structured_output'
+  | 'shell_disable'
   | 'model_override'
   | 'session_resume';
 
@@ -33,6 +34,7 @@ export type ProviderCapabilityRequirementContext = {
   requireReadToolAccess?: boolean;
   requireWriteToolAccess?: boolean;
   requireStructuredOutput?: boolean;
+  requireShellDisable?: boolean;
   requireSessionResume?: boolean;
   reasons?: Partial<Record<ProviderCapabilityName, string>>;
 };
@@ -44,7 +46,7 @@ export type AgentConfigCapabilityAssertionOptions = {
 type ResumeCapabilityState = Pick<
   OrchestrationState,
   'coderSessionHandle' | 'reviewerSessionHandle'
-> & Partial<Pick<OrchestrationState, 'plannerSessionHandle'>>;
+> & Partial<Pick<OrchestrationState, 'plannerSessionHandle' | 'executionProfile'>>;
 
 // Computed lazily instead of as a top-level constant: openai-compatible.ts
 // imports config.ts, which imports this module, so the definition bindings may
@@ -201,6 +203,14 @@ function assertRoleCapabilities(args: {
       requirementContext: args.requirementContext,
       config: args.config,
       missingCapability: 'structured_output',
+    });
+  }
+
+  if (args.requirementContext.requireShellDisable && args.capabilities.supportsShellDisable !== true) {
+    throwProviderCapabilityError({
+      requirementContext: args.requirementContext,
+      config: args.config,
+      missingCapability: 'shell_disable',
     });
   }
 
@@ -413,13 +423,40 @@ export function assertAgentConfigSupportsWriterRun(
   });
 }
 
+export function assertAgentConfigSupportsShadowRun(
+  agentConfig: AgentConfig,
+  options: AgentConfigCapabilityAssertionOptions = {},
+) {
+  const context = options.context ?? 'shadow writer run';
+  assertAgentConfigSupportsWriterRun(agentConfig, { context });
+  assertProviderSupportsCoder(agentConfig.coder, {
+    role: 'coder',
+    context,
+    reason: 'Shadow mode must mechanically disable shell execution while preserving repository read/write access',
+    requireWriteToolAccess: true,
+    requireStructuredOutput: true,
+    requireShellDisable: true,
+    reasons: {
+      shell_disable: 'Shadow mode may edit the checkout but must never execute project commands, tests, builds, migrations, or binaries',
+      coder_adapter: 'Shadow mode starts implementation turns through the configured coder adapter',
+      write_tool_access: 'Shadow mode still needs source edits in the anonymized checkout',
+      structured_output: 'Shadow mode uses schema-validated execution payloads',
+      model_override: 'a non-null coder model override is configured for this shadow run',
+    },
+  });
+}
+
 export function assertAgentConfigSupportsResume(
   agentConfig: AgentConfig,
   state: ResumeCapabilityState,
   options: AgentConfigCapabilityAssertionOptions = {},
 ) {
   const context = options.context ?? 'writer run resume';
-  assertAgentConfigSupportsWriterRun(agentConfig, { context });
+  if (state.executionProfile === 'shadow') {
+    assertAgentConfigSupportsShadowRun(agentConfig, { context });
+  } else {
+    assertAgentConfigSupportsWriterRun(agentConfig, { context });
+  }
 
   if (state.plannerSessionHandle) {
     assertProviderSupportsCoder(agentConfig.planner, {

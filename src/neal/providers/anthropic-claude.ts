@@ -2220,6 +2220,7 @@ export const anthropicClaudeProviderDefinition = {
       supportsSessionResume: true,
       supportsModelOverride: true,
       supportsStructuredOutput: true,
+      supportsShellDisable: true,
       usageReporting: 'opportunistic',
       supportedEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     },

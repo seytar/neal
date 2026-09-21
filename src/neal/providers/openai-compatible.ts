@@ -1599,6 +1599,7 @@ export const openAICompatibleProviderDefinition = {
       supportsSessionResume: false,
       supportsModelOverride: true,
       supportsStructuredOutput: true,
+      supportsShellDisable: true,
       usageReporting: 'opportunistic',
     },
     // Required so the coder role passes the final-completion

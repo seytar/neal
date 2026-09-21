@@ -30,6 +30,9 @@ export type ProviderRoleCapabilities = {
   supportsSessionResume: boolean;
   supportsModelOverride: boolean;
   supportsStructuredOutput: boolean;
+  // True only when the coder adapter can mechanically remove shell/command
+  // execution while retaining repository read/write tools.
+  supportsShellDisable?: boolean;
   usageReporting: ProviderUsageReporting;
   supportedEfforts?: readonly string[];
 };
