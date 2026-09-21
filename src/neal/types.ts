@@ -15,6 +15,7 @@ export type OrchestrationPhase =
   | 'interactive_blocked_recovery'
   | 'execute_finalization'
   | 'final_completion_review'
+  | 'awaiting_private_validation'
   | 'done'
   | 'blocked';
 
@@ -23,6 +24,7 @@ export type CoderSessionProtocol = 'legacy_marker_v1' | 'structured_json_v1';
 export type AgentProvider = ProviderId;
 export type ExecutionShape = 'one_shot' | 'multi_scope' | 'multi_scope_unknown';
 export type TopLevelMode = 'plan' | 'execute';
+export type ExecutionProfile = 'normal' | 'shadow';
 
 export type ManualGateResumeCheck = {
   type: 'command';
@@ -272,6 +274,7 @@ export type FinalCompletionAggregateReviewContext = {
 
 export type FinalCompletionPacket = {
   planDoc: string;
+  executionProfile?: ExecutionProfile;
   executionShape: ExecutionShape | null;
   currentScopeLabel: string;
   finalCommit: string | null;
@@ -364,6 +367,7 @@ export type InteractiveBlockedRecoveryState = {
     OrchestrationPhase,
     | 'interactive_blocked_recovery'
     | 'manual_gate'
+    | 'awaiting_private_validation'
     | 'done'
     | 'blocked'
   >;
@@ -426,6 +430,7 @@ export type OrchestrationState = {
   cwd: string;
   runDir: string;
   topLevelMode: TopLevelMode;
+  executionProfile: ExecutionProfile;
   allowedDirtyPaths: string[];
   agentConfig: AgentConfig;
   // How many times the read-only consultant has run for the current scope.
@@ -437,6 +442,10 @@ export type OrchestrationState = {
   // choice without re-supplying a flag; states persisted before this field
   // existed hydrate to true (the historical always-squash behavior).
   autoSquashOnCompletion: boolean;
+  privateValidationAcceptedAt: string | null;
+  privateValidationNote: string | null;
+  privateValidationFeedbackCount: number;
+  privateValidationFeedbackPath: string | null;
   progressJsonPath: string;
   progressMarkdownPath: string;
   recoveryMarkdownPath: string;
@@ -521,6 +530,7 @@ export type OrchestratorInit = {
   stateDir: string;
   runDir: string;
   topLevelMode: TopLevelMode;
+  executionProfile?: ExecutionProfile;
   allowedDirtyPaths: string[];
   agentConfig: AgentConfig;
   // Resolved squash-on-completion preference (`--no-squash` resolves false);

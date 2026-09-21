@@ -68,6 +68,36 @@ The enforced phase/status relationship is intentionally small:
 
 Read-only `neal review` is not a writer-run mode. It writes isolated findings artifacts under `.neal/reviews/<review-id>/` and does not create `OrchestrationState`.
 
+### Shadow private-validation gate
+
+Shadow execute runs persist `executionProfile: 'shadow'`. When the whole-plan
+static reviewer resolves `accept_complete`, the state machine intentionally
+lands on:
+
+```text
+phase: awaiting_private_validation
+status: paused
+```
+
+That phase is non-runnable and ordinary `neal resume` classifies it as
+non-resumable, so a generic resume cannot normalize the pause back to
+`running` or bypass the external validation gate.
+
+There are two operator transitions:
+
+- `neal shadow feedback --file <sanitized-file>` records the supplied sanitized
+  diagnostic as a run-local feedback artifact, reopens the same run at
+  `coder_scope`, and reuses the existing `continue_execution` semantics for
+  corrective work. The run remains Shadow-profiled, so coder shell execution
+  stays disabled on every corrective turn.
+- `neal shadow accept --note "..."` is valid only from the private-validation
+  wait. It records the acceptance timestamp/note and moves the run to
+  `phase: done`, `status: done`.
+
+The acceptance command is an operator assertion about validation performed
+outside neal. Neal never treats static review as runtime evidence and never
+claims to have executed the private repository.
+
 ## Recovery state
 
 Interactive blocked recovery is owned by `interactiveBlockedRecovery` while the active phase is `interactive_blocked_recovery`. The invariant layer validates execute-mode ownership, supported source phases, bounded turn counters, contiguous turn numbers, and disposition result phases.

@@ -224,6 +224,38 @@ neal execute PLAN.md
 neal execute PLAN.md --no-squash
 ```
 
+### Shadow mode
+
+Shadow mode is for an already-anonymized or otherwise non-runnable checkout.
+Anonymization, identifier mapping, and applying the resulting changes back to a
+private repository stay outside neal. Shadow mode changes the execution
+contract: coder turns may read and write source files, but neal requires a
+provider adapter that can mechanically remove shell/command execution.
+
+```bash
+neal plan PLAN.md
+neal shadow execute PLAN.md
+
+# After applying/re-mapping the changes, validate in the private repository.
+# If private validation fails, sanitize the diagnostic before giving it to neal:
+neal shadow feedback --run latest --file sanitized-feedback.txt
+
+# Repeat private validation after each corrective Shadow pass. Only after the
+# private build/tests/runtime checks pass:
+neal shadow accept --run latest --note "private build and tests passed"
+```
+
+A successful Shadow static review stops at
+`phase: awaiting_private_validation`, `status: paused`. It is deliberately
+not `done`: **static acceptance is not private/runtime validation**.
+Ordinary `neal resume` cannot bypass this gate. `shadow feedback` reopens the
+same run for corrective work, and `shadow accept` records the operator's
+explicit validation assertion before the run may become `done`.
+
+Shadow mode is provider-capability-driven, not provider-name-driven. Any coder
+adapter that can enforce the required no-shell policy may participate; see
+[docs/providers.md](docs/providers.md) and [SECURITY.md](SECURITY.md).
+
 Refine and execute one or more plans serially:
 
 ```bash
@@ -298,6 +330,9 @@ neal compat [--model <slug>] [--role coder|reviewer|planner|all] [--reference op
 neal run [--no-squash] <plan.md> [more-plans...]
 neal plan <plan.md>
 neal execute <plan.md> [--no-squash]
+neal shadow execute <plan.md> [--no-squash]
+neal shadow feedback --file <sanitized-feedback.txt> [--run <run-id>]
+neal shadow accept [--run <run-id>] [--note "..."]
 neal resume [--run <run-id>] [--message "..."]
 
 # Plan-free review

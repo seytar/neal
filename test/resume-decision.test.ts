@@ -483,3 +483,18 @@ test('resume decision reports done for a consumed queue child whose run complete
   assert.match(decision.summary, /already complete/);
   assert.equal(decision.retrospectivePath, retrospectivePath);
 });
+
+
+test('shadow private-validation wait cannot be resumed as ordinary writer work', async () => {
+  const state = await createDecisionState({
+    executionProfile: 'shadow',
+    phase: 'awaiting_private_validation',
+    status: 'paused',
+  });
+  const decision = decide(state);
+  assert.equal(decision.kind, 'cannot_resume');
+  if (decision.kind === 'cannot_resume') {
+    assert.match(decision.reason, /shadow accept/);
+    assert.match(decision.reason, /shadow feedback/);
+  }
+});

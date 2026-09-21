@@ -309,6 +309,9 @@ function truncateFailureMessage(message: string) {
 }
 
 function formatFinalSummaryLine(finalState: OrchestrationState, publicStatus: string) {
+  if (finalState.phase === 'awaiting_private_validation') {
+    return 'Static review accepted. Runtime verification has not been performed; private validation is required.';
+  }
   if (publicStatus === 'waiting_for_manual_gate') {
     const gate = finalState.manualGate;
     return gate
@@ -359,6 +362,9 @@ function formatFinalNextAction(
   runId: string,
   guidance: BlockedGuidance | null,
 ) {
+  if (finalState.phase === 'awaiting_private_validation') {
+    return `Validate the changes in the private source tree, then accept: neal shadow accept --run ${runId} --note "..."`;
+  }
   if (displayStatus.effectiveStatus === 'waiting_for_manual_gate') {
     return `Complete manual gate ${finalState.manualGate?.id ?? 'unknown'}, then resume this run: neal resume --run ${runId}`;
   }
@@ -408,6 +414,7 @@ export function renderFinalRunOutput(
     `- Run: ${runId}`,
     `- Plan: ${finalState.planDoc}`,
     `- Mode: ${finalState.topLevelMode}`,
+    ...(finalState.executionProfile === 'shadow' ? ['- Execution profile: shadow'] : []),
     `- Status: ${publicStatus}`,
     `- Step: ${formatPublicPhase(finalState.phase)}`,
     `- Persisted status: ${finalState.status}`,

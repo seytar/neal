@@ -56,6 +56,18 @@ export function decideResumeAction(args: {
     return lockDecision;
   }
 
+  if (args.state.phase === 'awaiting_private_validation') {
+    return {
+      kind: 'cannot_resume',
+      reason: [
+        `Run ${args.selectedRunId} is waiting for private validation.`,
+        `Use neal shadow accept --run ${args.selectedRunId} after private validation passes,`,
+        'or neal shadow feedback to reopen corrective work with sanitized private feedback.',
+      ].join(' '),
+      statusCommand,
+    };
+  }
+
   const queueDecision = decideQueueAction(args.queue, statusCommand);
   if (queueDecision) {
     // A consumed queue child whose run itself completed is the ordinary
