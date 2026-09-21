@@ -236,6 +236,7 @@ export type NealStatusListRun = {
   statePath: string;
   planDoc: string;
   topLevelMode: OrchestrationState['topLevelMode'];
+  executionProfile: OrchestrationState['executionProfile'];
   executionShape: OrchestrationState['executionShape'];
   status: OrchestrationState['status'];
   effectiveStatus: EffectiveRunStatus;
@@ -510,6 +511,7 @@ export async function buildStatusListSnapshot(args: {
         statePath: snapshot.statePath,
         planDoc: snapshot.planDoc,
         topLevelMode: snapshot.topLevelMode,
+        executionProfile: snapshot.executionProfile,
         executionShape: snapshot.executionShape,
         status: snapshot.status,
         effectiveStatus: snapshot.effectiveStatus,
@@ -544,6 +546,7 @@ export function renderHumanStatusSnapshot(snapshot: NealStatusSnapshot): string 
     `- Run directory: ${snapshot.runDir}`,
     `- Plan: ${snapshot.planDoc}`,
     `- Mode: ${snapshot.topLevelMode}`,
+    `- Execution profile: ${snapshot.executionProfile}`,
     `- Status: ${snapshot.publicStatus}`,
     `- Step: ${snapshot.publicPhase}`,
   ];

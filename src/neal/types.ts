@@ -274,7 +274,7 @@ export type FinalCompletionAggregateReviewContext = {
 
 export type FinalCompletionPacket = {
   planDoc: string;
-  executionProfile: ExecutionProfile;
+  executionProfile?: ExecutionProfile;
   executionShape: ExecutionShape | null;
   currentScopeLabel: string;
   finalCommit: string | null;
@@ -367,6 +367,7 @@ export type InteractiveBlockedRecoveryState = {
     OrchestrationPhase,
     | 'interactive_blocked_recovery'
     | 'manual_gate'
+    | 'awaiting_private_validation'
     | 'done'
     | 'blocked'
   >;
