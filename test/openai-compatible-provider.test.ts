@@ -725,6 +725,20 @@ test('the default model construction enables SDK structured outputs (real factor
   );
 });
 
+test('json_object mode disables transport json_schema while preserving Output.object parsing', () => {
+  const model = openAICompatibleProviderTestHooks.createDefaultOpenAICompatibleModel({
+    baseUrl: 'https://example.test/v1',
+    apiKey: 'test-key',
+    headers: {},
+    model: 'test-model',
+    structuredOutputMode: 'json_object',
+  });
+  assert.equal(
+    (model as { supportsStructuredOutputs?: unknown }).supportsStructuredOutputs,
+    false,
+  );
+});
+
 test('an HTTP 400 rejection on the structured finalization turn is attributable structured_output_invalid', async () => {
   const cwd = await createWorkDir();
   // The model rejects the schema-enforced `json_schema` request with HTTP 400

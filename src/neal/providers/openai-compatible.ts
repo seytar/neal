@@ -125,6 +125,7 @@ export type OpenAICompatibleModelFactory = (args: {
   apiKey: string;
   headers: Record<string, string>;
   model: string;
+  structuredOutputMode?: OpenAICompatibleSettings['structuredOutputMode'];
 }) => LanguageModel;
 
 type SleepFn = (ms: number) => Promise<void>;
@@ -148,26 +149,23 @@ function createDefaultOpenAICompatibleModel(args: {
   apiKey: string;
   headers: Record<string, string>;
   model: string;
+  structuredOutputMode?: OpenAICompatibleSettings['structuredOutputMode'];
 }): LanguageModel {
   // Exactly the spike's model construction: an OpenAI-compatible chat model.
   // maxRetries: 0 on each generateText call keeps neal's own apiRetryLimit
   // loop the only retry layer for this provider.
   //
-  // supportsStructuredOutputs: true tells the SDK to send the structured
-  // finalization turn's request with `response_format.type: 'json_schema'`
-  // carrying neal's schema (the `Output.object`/`jsonSchema` constraint in
-  // runAgentModelTurn). Without it the SDK silently drops the schema,
-  // downgrades to loose `json_object`, and emits the request-build warning
-  // "JSON response format schema is only supported with structuredOutputs" —
-  // a silent schema-drop that makes neal ask for enforced JSON but receive
-  // unenforced JSON. With the flag set, a gateway that cannot honor the
-  // schema fails attributably instead.
+  // json_schema is the default and preserves transport-level schema
+  // enforcement. Some OpenAI-compatible Chat Completions endpoints expose
+  // only JSON mode. For those, structured_output_mode: json_object tells the
+  // SDK to request response_format.type=json_object instead; Neal still runs
+  // the parsed object through the same protocol validator before accepting it.
   return createOpenAICompatible({
     name: OPENAI_COMPATIBLE_PROVIDER_ID,
     baseURL: args.baseUrl,
     apiKey: args.apiKey,
     headers: args.headers,
-    supportsStructuredOutputs: true,
+    supportsStructuredOutputs: args.structuredOutputMode !== 'json_object',
     // On OpenRouter, constrain routing to backends that support the parameters
     // neal sends — above all the coder's `response_format: json_schema`. Without
     // it OpenRouter can route the same slug to a backend that can't do
@@ -483,6 +481,7 @@ type ResolvedOpenAICompatibleSettings = {
   baseUrl: string;
   apiKey: string;
   model: string;
+  structuredOutputMode: NonNullable<OpenAICompatibleSettings['structuredOutputMode']>;
   headers: Record<string, string>;
   pricing: ProviderPricing | null;
 };
@@ -561,6 +560,7 @@ function resolveOpenAICompatibleSettings(args: {
     baseUrl: settings.baseUrl,
     apiKey: settings.apiKey,
     model,
+    structuredOutputMode: settings.structuredOutputMode ?? 'json_schema',
     headers: settings.headers,
     pricing: settings.pricing,
   };
@@ -1329,6 +1329,7 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
       apiKey: settings.apiKey,
       headers: settings.headers,
       model: settings.model,
+      structuredOutputMode: settings.structuredOutputMode,
     });
 
     const state: AgentLoopState = {
@@ -1483,6 +1484,7 @@ class OpenAICompatibleStructuredAdvisorAdapter implements StructuredAdvisorAdapt
         apiKey: settings.apiKey,
         headers: settings.headers,
         model: settings.model,
+        structuredOutputMode: settings.structuredOutputMode,
       });
 
       const state: AgentLoopState = {
