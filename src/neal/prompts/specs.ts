@@ -723,7 +723,7 @@ export const PROMPT_SPECS: readonly PromptSpec[] = [
   },
   {
     id: 'completion_coder',
-    version: 2,
+    version: 3,
     changelog: [
       {
         version: 1,
@@ -732,6 +732,10 @@ export const PROMPT_SPECS: readonly PromptSpec[] = [
       {
         version: 2,
         renderSha: '85f36db1245090baa3c8f74e5fe2d3de774664dcb6a3b1b84dcc49425cc3c646',
+      },
+      {
+        version: 3,
+        renderSha: 'c99d29ae301253bc1ec92cef7f08aaeeea20da511c8a87b863d3d7e7401267e6',
       },
     ],
     role: 'coder',
@@ -787,7 +791,7 @@ export const PROMPT_SPECS: readonly PromptSpec[] = [
   },
   {
     id: 'completion_reviewer',
-    version: 6,
+    version: 7,
     changelog: [
       {
         version: 1,
@@ -812,6 +816,10 @@ export const PROMPT_SPECS: readonly PromptSpec[] = [
       {
         version: 6,
         renderSha: '079a57a685c33aaba5b9a6b919ed4cb961a79f89e770ed6ede85020b618addd6',
+      },
+      {
+        version: 7,
+        renderSha: 'bc184eee4f43cd8ec133dbb8f33f2c48e2c2907b42c6f20b5d7e341c1d29245a',
       },
     ],
     role: 'reviewer',
