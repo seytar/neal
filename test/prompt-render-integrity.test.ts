@@ -673,7 +673,7 @@ const EXPECTED_KEYS: Record<PromptSpecId, string[]> = {
 const EXPECTED_MODULE_SHAS: Record<(typeof MATRIX_BUILDER_MODULES)[number], string> = {
   'src/neal/prompts/planning.ts': '602857121d8b3c1dea023ef1156b7f7259c298a378ab7f4b74503b675b91b1fe',
   'src/neal/prompts/execute.ts': 'c95f55c42f5571204f6e795a575ea97a57375b064772c8e1f2421fbe6978ca98',
-  'src/neal/prompts/specialized.ts': 'fd8986f52bc8bbeece6c8f007fc688db1232b5f373ac37dd7eae71aacffc30eb',
+  'src/neal/prompts/specialized.ts': 'b5eee90891e11a2f27109fc476d0473c8e20a676ef41fbf894aa76e1385d26e4',
   'src/neal/agents/prompts.ts': 'c9b8b6bd135206ec8c7055aa887d65003490b8fdef95c3a662797018d01a667e',
   'src/neal/context/reviewer-context.ts': '7168f61b26ff2c9fb9fa67ce7c608f452722fcfc5187f8c346910264a4c00674',
   'src/neal/context/inline-review-context.ts': '707a75dec9712158b14c9b15ccac19491a6b0d3221089545b4b2c3431458bbe7',
@@ -980,6 +980,16 @@ function registerTests(): void {
     for (const relPath of MATRIX_BUILDER_MODULES) {
       assertModuleShaMatches(relPath, EXPECTED_MODULE_SHAS[relPath]);
     }
+  });
+
+  test('normal completion summary render remains byte-compatible with pre-Shadow v2', () => {
+    const legacy = readGolden('completion_coder', 2);
+    assert.ok(legacy, 'completion_coder v2 golden must exist');
+    const legacyHeader = '=== buildFinalCompletionSummaryPrompt ===\n';
+    assert.ok(legacy.startsWith(legacyHeader), 'completion_coder v2 golden must contain the legacy single-cell header');
+    const legacyRender = legacy.slice(legacyHeader.length, -1);
+    const normalRender = cellRenderByKey('buildFinalCompletionSummaryPrompt#executionProfile=normal');
+    assert.equal(normalRender, legacyRender);
   });
 
   test('reviewer access-mode branches render distinctly (both read-only submodes covered)', () => {

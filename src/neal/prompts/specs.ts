@@ -735,7 +735,7 @@ export const PROMPT_SPECS: readonly PromptSpec[] = [
       },
       {
         version: 3,
-        renderSha: 'c99d29ae301253bc1ec92cef7f08aaeeea20da511c8a87b863d3d7e7401267e6',
+        renderSha: 'b7efda3e7500c27a77332a62a25e856e82c6d92b5345d9d5e45c762dcf610e0c',
       },
     ],
     role: 'coder',
