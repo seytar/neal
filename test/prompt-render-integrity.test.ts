@@ -105,6 +105,7 @@ const CANNED_INLINE_CONTEXT: InlineReviewerContext = {
 
 const CANNED_COMPLETION_PACKET: FinalCompletionPacket = {
   planDoc: PLAN_DOC,
+  executionProfile: 'normal',
   executionShape: 'multi_scope',
   currentScopeLabel: '6',
   finalCommit: HEAD_COMMIT,
@@ -415,16 +416,27 @@ const reviewerSpec: BuilderMatrixSpec = {
 
 const finalCompletionSummarySpec: BuilderMatrixSpec = {
   exportName: 'buildFinalCompletionSummaryPrompt',
-  axes: [],
-  render: () => buildFinalCompletionSummaryPrompt({ planDoc: PLAN_DOC, packet: CANNED_COMPLETION_PACKET }),
+  axes: [{ name: 'executionProfile', values: ['normal', 'shadow'] }],
+  render: (c) =>
+    buildFinalCompletionSummaryPrompt({
+      planDoc: PLAN_DOC,
+      packet: {
+        ...CANNED_COMPLETION_PACKET,
+        executionProfile: c.executionProfile as 'normal' | 'shadow',
+      },
+    }),
 };
 
 function renderCompletionReviewer(c: Combo): string {
   const available = c.aggregateRange === 'available';
   const accessMode = reviewerAccessMode(c.accessMode);
+  const packet = available ? CANNED_COMPLETION_PACKET : CANNED_COMPLETION_PACKET_UNAVAILABLE;
   return buildFinalCompletionReviewerPrompt({
     planDoc: PLAN_DOC,
-    packet: available ? CANNED_COMPLETION_PACKET : CANNED_COMPLETION_PACKET_UNAVAILABLE,
+    packet: {
+      ...packet,
+      executionProfile: c.executionProfile as 'normal' | 'shadow',
+    },
     summary: CANNED_COMPLETION_SUMMARY,
     scratchDir: SCRATCH_DIR,
     reviewerContext: CANNED_REVIEWER_PACKET,
@@ -444,6 +456,7 @@ const finalCompletionReviewerAvailableSpec: BuilderMatrixSpec = {
   axes: [
     { name: 'accessMode', values: ['tool-access', 'read-only-inlined', 'read-only-tool'] },
     { name: 'aggregateRange', values: ['available'] },
+    { name: 'executionProfile', values: ['normal', 'shadow'] },
     { name: 'reviewLevel', values: REVIEW_LEVEL_AXIS_VALUES },
   ],
   render: renderCompletionReviewer,
@@ -454,6 +467,7 @@ const finalCompletionReviewerUnavailableSpec: BuilderMatrixSpec = {
   axes: [
     { name: 'accessMode', values: ['tool-access', 'read-only-tool'] },
     { name: 'aggregateRange', values: ['unavailable'] },
+    { name: 'executionProfile', values: ['normal', 'shadow'] },
     { name: 'reviewLevel', values: REVIEW_LEVEL_AXIS_VALUES },
   ],
   render: renderCompletionReviewer,

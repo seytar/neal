@@ -28,6 +28,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Temporary maintenance step for the Shadow prompt-spec version bump.
+      # Removed once the generated canonical goldens are committed.
+      - name: Generate Shadow prompt goldens
+        run: pnpm exec tsx scripts/generate-shadow-prompt-goldens.mts
+
+      - name: Upload Shadow prompt goldens
+        uses: actions/upload-artifact@v4
+        with:
+          name: shadow-prompt-goldens
+          path: tmp/shadow-prompt-goldens
+
       - name: Typecheck
         run: pnpm typecheck
 
