@@ -20,6 +20,14 @@ test('shadow capability accepts shell-disable coders and rejects Codex coder', (
     reviewer: { provider: 'openai-codex', model: null },
   }));
 
+  // Shadow mode is capability-driven, not provider-name-driven. Claude also
+  // mechanically removes Bash when allowRun:false, so it remains a valid coder.
+  assert.doesNotThrow(() => assertAgentConfigSupportsShadowRun({
+    planner: { provider: 'anthropic-claude', model: null },
+    coder: { provider: 'anthropic-claude', model: null },
+    reviewer: { provider: 'openai-codex', model: null },
+  }));
+
   assert.throws(() => assertAgentConfigSupportsShadowRun({
     planner: { provider: 'anthropic-claude', model: null },
     coder: { provider: 'openai-codex', model: null },
