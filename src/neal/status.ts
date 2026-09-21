@@ -50,6 +50,7 @@ export type NealStatusSnapshot = {
   runDir: string;
   planDoc: string;
   topLevelMode: OrchestrationState['topLevelMode'];
+  executionProfile: OrchestrationState['executionProfile'];
   executionShape: OrchestrationState['executionShape'];
   phase: OrchestrationState['phase'];
   publicPhase: string;
@@ -387,18 +388,20 @@ export async function buildStatusSnapshot(args: {
   const publicStatus = formatPublicStatusForDisplayStatus(displayStatus, health);
   const publicPhase = formatPublicPhase(state.phase);
   const providerError = summarizeProviderError(tail.events);
-  const nextAction = formatNextAction({
-    manualGate,
-    resumeDecision,
-    finalCompletionStaleness,
-    runId,
-    blockedGuidance,
-    // The Next Action must reflect the run's current failure, not history: the
-    // provider-error summary stays on the snapshot as historical information,
-    // but it only drives the Next Action while no later provider turn or phase
-    // has completed successfully after it.
-    providerError: providerError && isProviderErrorActive(tail.events) ? providerError : null,
-  });
+  const nextAction = state.phase === 'awaiting_private_validation'
+    ? `Validate privately, then accept: neal shadow accept --run ${runId} --note "..."`
+    : formatNextAction({
+        manualGate,
+        resumeDecision,
+        finalCompletionStaleness,
+        runId,
+        blockedGuidance,
+        // The Next Action must reflect the run's current failure, not history: the
+        // provider-error summary stays on the snapshot as historical information,
+        // but it only drives the Next Action while no later provider turn or phase
+        // has completed successfully after it.
+        providerError: providerError && isProviderErrorActive(tail.events) ? providerError : null,
+      });
   const commits = summarizeCommits(state);
   const squash = await summarizeSquashArtifact(state.runDir);
   const build = await summarizeBuild(state);
@@ -412,6 +415,7 @@ export async function buildStatusSnapshot(args: {
     runDir: state.runDir,
     planDoc: state.planDoc,
     topLevelMode: state.topLevelMode,
+    executionProfile: state.executionProfile,
     executionShape: state.executionShape,
     phase: state.phase,
     publicPhase,
@@ -784,6 +788,9 @@ function formatNextAction(
 
 export function formatStatusNextActionForState(state: OrchestrationState) {
   const runId = basename(state.runDir);
+  if (state.phase === 'awaiting_private_validation') {
+    return `Validate privately, then accept: neal shadow accept --run ${runId} --note "..."`;
+  }
   const resumeDecision = decideResumeAction({
     state,
     selectedRunId: runId,
