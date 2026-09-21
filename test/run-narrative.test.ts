@@ -912,6 +912,7 @@ function sampleStatusSnapshot(
     runDir: fixture.runDir,
     planDoc: fixture.state.planDoc,
     topLevelMode: fixture.state.topLevelMode,
+    executionProfile: fixture.state.executionProfile,
     executionShape: fixture.state.executionShape,
     phase: fixture.state.phase,
     publicPhase: 'implementing current scope',
