@@ -21,7 +21,8 @@ The single-run JSON is the authoritative read model for wrappers that already
 know a run id. Important stable fields include:
 
 - `runId`, `status`, `effectiveStatus`, `publicStatus`, `phase`,
-  `publicPhase`, and `nextAction` for classification and follow-up.
+  `publicPhase`, `executionProfile`, and `nextAction` for classification
+  and follow-up.
 - `waitingForOperatorGuidance`, `pendingOperatorGuidance`, `blocker`,
   `manualGate`, `resumeDecision`, `health`, and `lock` for blocked, waiting,
   paused, timed-out, live-lock, stale-lock, and manually gated states.
@@ -77,6 +78,7 @@ neal operations and diagnostics.
 | `.neal/runs/<run-id>/SCOPE_<scope>_INVALID_DERIVED_PLAN.md` | Support/debug artifact | Rejected split-plan payload and its validation errors. Written only when the returned replacement plan is invalid. |
 | `.neal/runs/<run-id>/SCOPE_<scope>_DISCARDED.diff` | Support/debug artifact | Scope work preserved before neal resets it while adopting a replacement plan. |
 | `.neal/runs/<run-id>/GATE-<id>.md` | User-facing human artifact | Instructions and resume checks for an active manual gate. |
+| `.neal/runs/<run-id>/PRIVATE_VALIDATION_FEEDBACK-<n>.md` | User-facing human artifact | Operator-supplied sanitized private-validation feedback for a Shadow run. Neal stores the supplied text for audit/context but does not sanitize it itself. |
 | `.neal/runs/<run-id>/scratch/` | Support/debug artifact | Reserved run-local scratch root for execute-scope and final-completion review. Read-only reviewer prompts do not use it. It is not durable state, but it remains project-local `.neal/` data for retention and privacy purposes. |
 | `.neal/runs/<run-id>/plan-progress.json` | Internal state | Machine-readable v1 progress artifact used by neal context and summaries. |
 | `.neal/runs/<run-id>/PLAN_PROGRESS.md` | User-facing human artifact | Human-readable progress summary for the active plan or scope. |

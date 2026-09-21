@@ -77,6 +77,8 @@ Each provider capability role declares:
 - model override support
 - neal structured control protocol support
 - usage reporting support
+- whether coder shell execution can be mechanically disabled while retaining
+  source-edit capability (`supportsShellDisable`)
 
 Capabilities are enforced before writer work starts or resumes. neal requires
 the planner and coder effective roles to resolve to providers with the coder
@@ -141,6 +143,20 @@ strength is adapter-specific and mechanical where each SDK allows it:
 
 Rounds without a `toolPolicy` are unaffected on every adapter: ordinary coder
 scope rounds keep full access because verification legitimately runs commands.
+
+Shadow execute rounds deliberately do carry a no-shell policy. Shadow eligibility
+is capability-based: `assertAgentConfigSupportsShadowRun` requires a writable
+structured coder whose adapter declares `supportsShellDisable: true`. Every
+Shadow coder surface receives `allowRun: false`; the registry rejects an
+adapter that cannot mechanically enforce it. Current built-in behavior is:
+
+- `anthropic-claude`: eligible; `Bash` is removed from the coder tool list.
+- `openai-compatible`: eligible; the neal-owned toolset omits `run`.
+- `openai-codex`: not currently eligible; `workspace-write` can constrain
+  writes but still exposes command execution.
+
+This list describes current implementations, not a provider allowlist. A future
+adapter becomes Shadow-eligible by satisfying the same capability contract.
 
 ### The read-only reviewer invariant
 
