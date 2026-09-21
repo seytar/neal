@@ -1,14 +1,10 @@
 name: CI
 
-permissions:
-  contents: write
-
 on:
   pull_request:
   push:
     branches:
       - main
-      - feature/shadow-mode
 
 jobs:
   verify:
@@ -31,21 +27,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Generate compatibility prompt golden
-        run: pnpm exec tsx scripts/generate-shadow-prompt-goldens.mts
-
-      - name: Commit compatibility prompt golden
-        if: github.ref == 'refs/heads/feature/shadow-mode' || github.event_name == 'pull_request'
-        run: |
-          cp tmp/shadow-prompt-goldens/completion_coder.v3.txt test/fixtures/prompts/render-integrity/completion_coder.v3.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add test/fixtures/prompts/render-integrity/completion_coder.v3.txt
-          if ! git diff --cached --quiet; then
-            git commit -m "Refresh normal-compatible completion coder golden"
-            git push origin HEAD:feature/shadow-mode
-          fi
 
       - name: Typecheck
         run: pnpm typecheck
