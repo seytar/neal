@@ -2,6 +2,7 @@ import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  assertAgentConfigSupportsResume,
   assertAgentConfigSupportsWriterRun,
   assertProviderSupportsCoder,
   assertProviderSupportsStructuredAdvisor,
@@ -422,6 +423,34 @@ test('openai-compatible is registered and passes coder, planner, and reviewer ca
         requireStructuredOutput: true,
       },
     ),
+  );
+});
+
+test('openai-compatible writer handles satisfy Neal resume while reviewer handles remain unsupported', () => {
+  const config = {
+    planner: { provider: 'openai-compatible' as const, model: null },
+    coder: { provider: 'openai-compatible' as const, model: null },
+    reviewer: { provider: 'openai-compatible' as const, model: null },
+  };
+
+  assert.doesNotThrow(() =>
+    assertAgentConfigSupportsResume(config, {
+      plannerSessionHandle: 'openai-compatible:v1:111111111111111111111111',
+      coderSessionHandle: 'openai-compatible:v1:222222222222222222222222',
+      reviewerSessionHandle: null,
+      executionProfile: 'normal',
+    }),
+  );
+
+  assert.throws(
+    () =>
+      assertAgentConfigSupportsResume(config, {
+        plannerSessionHandle: null,
+        coderSessionHandle: null,
+        reviewerSessionHandle: 'openai-compatible:reviewer-session',
+        executionProfile: 'normal',
+      }),
+    /reviewer role: .*missing session resume/,
   );
 });
 
