@@ -298,8 +298,8 @@ function parsePersistentCoderSessionRecord(value: unknown): OpenAICompatibleCode
 }
 
 async function readPersistentCoderSession(cwd: string, sessionHandle: string) {
-  const path = getPersistentCoderSessionPath(cwd, sessionHandle);
   try {
+    const path = getPersistentCoderSessionPath(cwd, sessionHandle);
     const raw = await readFile(path, 'utf8');
     return parsePersistentCoderSessionRecord(JSON.parse(raw) as unknown);
   } catch (error) {
