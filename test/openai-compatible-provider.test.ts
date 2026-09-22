@@ -1221,6 +1221,49 @@ test('structured finalization failure resumes at finalization without replaying 
   assert.equal((finalPrompt.match(/Return the final test_payload control payload now/g) ?? []).length, 1);
 });
 
+test('a completed writer session carries context into the next Neal round without re-firing session start', async () => {
+  const cwd = await createWorkDir();
+  const model = scriptedModel([
+    () => textResponse('First writer round complete.'),
+    jsonPayloadResponse,
+    () => textResponse('Second writer round complete with prior context.'),
+    jsonPayloadResponse,
+  ]);
+  const adapter = createAdapter({ model });
+  const { sink } = collectEvents();
+  const started: string[] = [];
+
+  const first = await adapter.runStructuredPrompt<TestPayload>({
+    ...structuredArgs(cwd, sink),
+    prompt: 'First Neal writer phase.',
+    apiRetryLimit: 0,
+    onSessionStarted: (handle) => {
+      started.push(handle);
+    },
+  });
+  assert.ok(first.sessionHandle);
+  assert.deepEqual(started, [first.sessionHandle]);
+
+  const second = await adapter.runStructuredPrompt<TestPayload>({
+    ...structuredArgs(cwd, sink),
+    prompt: 'Second Neal writer phase.',
+    apiRetryLimit: 0,
+    resumeHandle: first.sessionHandle,
+    onSessionStarted: (handle) => {
+      started.push(handle);
+    },
+  });
+
+  assert.equal(second.sessionHandle, first.sessionHandle);
+  assert.deepEqual(second.structured, { done: true });
+  assert.deepEqual(started, [first.sessionHandle]);
+
+  const secondRoundPrompt = JSON.stringify(model.doGenerateCalls[2].prompt);
+  assert.equal((secondRoundPrompt.match(/First Neal writer phase\./g) ?? []).length, 1);
+  assert.equal((secondRoundPrompt.match(/Second Neal writer phase\./g) ?? []).length, 1);
+  assert.match(secondRoundPrompt, /First writer round complete\./);
+});
+
 test('runPrompt runs the same loop and returns a durable session handle', async () => {
   const cwd = await createWorkDir();
   const model = scriptedModel([
