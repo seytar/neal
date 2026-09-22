@@ -343,6 +343,7 @@ neal status [--json] [--run <run-id>]
 neal status [--json] --all
 neal usage [--json] [--run <run-id>]
 neal usage [--json] --all
+neal changes [--json] [--run <run-id>]
 neal squash [plan.md]
 
 # CLI information
@@ -403,6 +404,17 @@ data in machine-readable form. Cost values are telemetry only: they may be
 provider-reported or rate-estimated and must not be interpreted as account
 billing. Subscription quota percentages and actual account charges remain
 provider-side state and are not available through Neal.
+
+`neal changes` is a read-only Git check for one run. It compares the current
+scope's recorded base commit with the checkout's current `HEAD`, separately
+reports uncommitted worktree changes after filtering Neal-owned paths and the
+run's admitted dirty paths, and also summarizes the whole run from
+`initialBaseCommit`. This makes failed or paused runs easy to inspect without
+manually reconstructing Git ranges. With no selector it uses the current run
+pointer; `--run latest` has the same current-pointer semantics as other
+commands, and `--json` emits a machine-readable snapshot. If `HEAD` is not
+descended from a recorded base, the affected range is reported as unknown
+rather than being attributed to Neal.
 
 `neal squash` rewrites a completed run into one commit. It previews the change
 and requires interactive confirmation before rewriting history.
