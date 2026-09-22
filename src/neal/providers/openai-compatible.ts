@@ -1326,35 +1326,53 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
   constructor(private readonly options: OpenAICompatibleAdapterOptions) {}
 
   async runPrompt(args: CoderRunPromptArgs): Promise<CoderRunPromptResult> {
-    const sessionHandle = buildSyntheticSessionHandle();
+    let sessionHandle: string | null = args.resumeHandle ?? null;
     try {
-      this.assertNoResumeHandle(args.resumeHandle, sessionHandle);
-      const state = this.prepareLoopState({
+      const prepared = await this.prepareLoopState({
         cwd: args.cwd,
-        sessionHandle,
+        resumeHandle: args.resumeHandle,
         events: args.events,
         toolPolicy: args.toolPolicy,
       });
-      await this.emitSessionStarted({ sessionHandle, events: args.events });
+      sessionHandle = prepared.sessionHandle;
+      if (prepared.isNewSession) {
+        await args.onSessionStarted?.(sessionHandle);
+        await this.emitSessionStarted({ sessionHandle, events: args.events });
+      }
+
+      const operation = this.beginOrResumeOperation(prepared.state, {
+        kind: 'prompt',
+        label: null,
+      });
+      if (operation.stage !== 'tool_loop') {
+        throw this.sessionUnavailable(
+          sessionHandle,
+          `unstructured coder operation cannot resume from stage ${JSON.stringify(operation.stage)}`,
+        );
+      }
+
       // CoderRunPromptArgs carries no apiRetryLimit: runPrompt performs no
       // in-round transient retries; the liveness supervisor and orchestrator
       // retries own recovery there.
-      const finalResponse = await runAgentToolLoop({
-        role: 'coder',
-        state,
-        sessionHandle,
-        inactivityTimeoutMs: args.inactivityTimeoutMs,
-        apiRetryLimit: 0,
-        stepCap: CODER_STEP_CAP,
-        includeStepsTelemetry: false,
-        sleep: this.options.sleep ?? defaultSleep,
-        signal: args.signal,
-        events: args.events,
-      }, args.prompt);
-      // Never persist a resumable handle for this provider, and never invoke
-      // args.onSessionStarted: the orchestrator persists that callback's
-      // handle and would then demand session_resume support.
-      return { sessionHandle: null, finalResponse };
+      const finalResponse = await runAgentToolLoop(
+        {
+          role: 'coder',
+          state: prepared.state,
+          sessionHandle,
+          inactivityTimeoutMs: args.inactivityTimeoutMs,
+          apiRetryLimit: 0,
+          stepCap: CODER_STEP_CAP,
+          includeStepsTelemetry: false,
+          sleep: this.options.sleep ?? defaultSleep,
+          signal: args.signal,
+          events: args.events,
+        },
+        args.prompt,
+        { resumeActiveOperation: prepared.resumedActiveOperation },
+      );
+      prepared.state.persistentSession!.record.activeOperation = null;
+      await persistAgentLoopSession(prepared.state);
+      return { sessionHandle, finalResponse };
     } catch (error) {
       throw await this.surfaceError(error, {
         sessionHandle,
@@ -1367,14 +1385,10 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
   async runStructuredPrompt<TStructured>(
     args: CoderStructuredPromptArgs<TStructured>,
   ): Promise<CoderStructuredPromptResult<TStructured>> {
-    const sessionHandle = buildSyntheticSessionHandle();
+    let sessionHandle: string | null = args.resumeHandle ?? null;
     try {
-      this.assertNoResumeHandle(args.resumeHandle, sessionHandle);
       const protocol = args.structuredJsonProtocol;
       if (!protocol || protocol.protocol !== 'neal-json-block-v1') {
-        // The spec is still required: it carries the schema, validator, and
-        // labels that drive the SDK-native structured-output finalization
-        // turn (the fence protocol itself is never rendered here).
         throw createOpenAICompatibleProviderError({
           message:
             `openai-compatible ${args.label} prompts require the neal-json-block-v1 structured JSON ` +
@@ -1387,9 +1401,6 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
         });
       }
       if (typeof protocol.schema === 'string') {
-        // Configuration error: the SDK's jsonSchema(...) needs the object
-        // form. No runtime caller passes the string arm of the spec's
-        // schema union today.
         throw createOpenAICompatibleProviderError({
           message:
             `openai-compatible ${args.label} prompts require an object-form JSON schema for ` +
@@ -1402,18 +1413,26 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
         });
       }
 
-      const state = this.prepareLoopState({
+      const prepared = await this.prepareLoopState({
         cwd: args.cwd,
-        sessionHandle,
+        resumeHandle: args.resumeHandle,
         label: args.label,
         events: args.events,
         toolPolicy: args.toolPolicy,
       });
-      await this.emitSessionStarted({ sessionHandle, label: args.label, events: args.events });
+      sessionHandle = prepared.sessionHandle;
+      if (prepared.isNewSession) {
+        await args.onSessionStarted?.(sessionHandle);
+        await this.emitSessionStarted({ sessionHandle, label: args.label, events: args.events });
+      }
 
+      const operation = this.beginOrResumeOperation(prepared.state, {
+        kind: 'structured_prompt',
+        label: args.label,
+      });
       const turnContext: AgentTurnContext = {
         role: 'coder',
-        state,
+        state: prepared.state,
         sessionHandle,
         label: args.label,
         inactivityTimeoutMs: args.inactivityTimeoutMs,
@@ -1425,19 +1444,34 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
         events: args.events,
       };
 
-      // The tool loop runs to its normal zero-tool-call completion turn on a
-      // fence-free prompt; its assistant text stays in the shared history.
-      // Then exactly one finalization turn produces the structured payload.
-      await runAgentToolLoop(turnContext, appendResponseShapeHint(args.prompt, protocol));
+      if (operation.stage === 'tool_loop') {
+        await runAgentToolLoop(
+          turnContext,
+          appendResponseShapeHint(args.prompt, protocol),
+          { resumeActiveOperation: prepared.resumedActiveOperation },
+        );
+        setPersistentOperationStage(prepared.state, 'finalization_pending');
+        await persistAgentLoopSession(prepared.state);
+      }
+
+      const currentStage = prepared.state.persistentSession!.record.activeOperation?.stage;
+      if (currentStage !== 'finalization_pending' && currentStage !== 'finalization') {
+        throw this.sessionUnavailable(
+          sessionHandle,
+          `structured coder operation cannot resume from stage ${JSON.stringify(currentStage)}`,
+        );
+      }
+
       const structured = await runStructuredFinalizationTurn({
         ctx: turnContext,
         protocol,
         schema: protocol.schema,
+        resumeActiveOperation: currentStage === 'finalization',
       });
 
-      // Never persist a resumable handle; args.onSessionStarted is never
-      // invoked for this provider (see runPrompt).
-      return { sessionHandle: null, structured };
+      prepared.state.persistentSession!.record.activeOperation = null;
+      await persistAgentLoopSession(prepared.state);
+      return { sessionHandle, structured };
     } catch (error) {
       throw await this.surfaceError(error, {
         sessionHandle,
@@ -1448,30 +1482,46 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
     }
   }
 
-  private assertNoResumeHandle(resumeHandle: string | null | undefined, sessionHandle: string) {
-    if (resumeHandle === undefined || resumeHandle === null) {
-      return;
+  private beginOrResumeOperation(
+    state: AgentLoopState,
+    expected: Pick<OpenAICompatibleCoderOperation, 'kind' | 'label'>,
+  ): OpenAICompatibleCoderOperation {
+    const record = state.persistentSession?.record;
+    if (!record) {
+      throw new Error('persistent coder session is missing from loop state');
     }
-    // Defensive: this provider never persists a session handle, so a
-    // non-null resume handle can only come from corrupted run state.
-    throw createOpenAICompatibleProviderError({
-      message:
-        'openai-compatible does not support session resume and never persists session handles, ' +
-        `but a resume handle was provided (${JSON.stringify(resumeHandle)}); this indicates corrupted run state.`,
-      role: 'coder',
-      sessionHandle,
-      kind: 'session_unavailable',
-      retryable: false,
-    });
+    const active = record.activeOperation;
+    if (active) {
+      if (active.kind !== expected.kind || active.label !== expected.label) {
+        throw this.sessionUnavailable(
+          null,
+          `active operation is ${active.kind}/${JSON.stringify(active.label)}, expected ` +
+            `${expected.kind}/${JSON.stringify(expected.label)}`,
+        );
+      }
+      return active;
+    }
+
+    const operation: OpenAICompatibleCoderOperation = {
+      ...expected,
+      stage: 'tool_loop',
+    };
+    record.activeOperation = operation;
+    return operation;
   }
 
-  private prepareLoopState(args: {
+  private async prepareLoopState(args: {
     cwd: string;
-    sessionHandle: string;
+    resumeHandle?: string | null;
     label?: string | undefined;
     events?: ProviderEventSink | undefined;
     toolPolicy?: CoderRunPromptArgs['toolPolicy'];
-  }): AgentLoopState {
+  }): Promise<{
+    state: AgentLoopState;
+    sessionHandle: string;
+    isNewSession: boolean;
+    resumedActiveOperation: boolean;
+  }> {
     const resolveSettings = this.options.resolveSettings ?? getOpenAICompatibleSettings;
     const settings = resolveOpenAICompatibleSettings({
       cwd: args.cwd,
@@ -1494,16 +1544,47 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
       structuredOutputMode: settings.structuredOutputMode,
     });
 
+    const isNewSession = !args.resumeHandle;
+    const sessionHandle = args.resumeHandle ?? buildPersistentCoderSessionHandle();
+    const now = new Date().toISOString();
+    const sessionRecord = isNewSession
+      ? {
+          version: 1 as const,
+          modelSlug: settings.model,
+          structuredOutputMode: settings.structuredOutputMode,
+          messages: [],
+          activeOperation: null,
+          createdAt: now,
+          updatedAt: now,
+        }
+      : await readPersistentCoderSession(args.cwd, sessionHandle);
+
+    if (
+      sessionRecord.modelSlug !== settings.model ||
+      sessionRecord.structuredOutputMode !== settings.structuredOutputMode
+    ) {
+      throw this.sessionUnavailable(
+        sessionHandle,
+        `saved session uses model ${JSON.stringify(sessionRecord.modelSlug)} with ` +
+          `${sessionRecord.structuredOutputMode}, current config resolves ${JSON.stringify(settings.model)} ` +
+          `with ${settings.structuredOutputMode}`,
+      );
+    }
+
     const state: AgentLoopState = {
       model,
       modelSlug: settings.model,
-      // Assigned immediately below; the toolset's event hook needs the state
-      // object to update the cumulative per-tool telemetry maps.
       tools: undefined as unknown as ToolSet,
-      messages: [],
+      messages: sessionRecord.messages,
+      persistentSession: {
+        record: sessionRecord,
+        save: () => writePersistentCoderSession(args.cwd, sessionHandle, sessionRecord),
+      },
       structuredOutputMode: settings.structuredOutputMode,
       toolCalls: {},
       toolErrors: {},
+      // The cap is per adapter invocation. A resumed invocation receives a
+      // fresh turn budget while keeping the full prior message history.
       steps: 0,
       pricing: settings.pricing,
     };
@@ -1515,12 +1596,32 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
         forwardAgentToolEvent(event, {
           role: 'coder',
           state,
-          sessionHandle: args.sessionHandle,
+          sessionHandle,
           label: args.label,
           events: args.events,
         }),
     });
-    return state;
+
+    if (isNewSession) {
+      await persistAgentLoopSession(state);
+    }
+
+    return {
+      state,
+      sessionHandle,
+      isNewSession,
+      resumedActiveOperation: !isNewSession && sessionRecord.activeOperation !== null,
+    };
+  }
+
+  private sessionUnavailable(sessionHandle: string | null, reason: string) {
+    return createOpenAICompatibleProviderError({
+      message: `openai-compatible coder session is unavailable: ${reason}.`,
+      role: 'coder',
+      sessionHandle,
+      kind: 'session_unavailable',
+      retryable: false,
+    });
   }
 
   private async emitSessionStarted(args: {
@@ -1540,7 +1641,7 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
   private async surfaceError(
     error: unknown,
     ctx: {
-      sessionHandle: string;
+      sessionHandle: string | null;
       label?: string | undefined;
       events?: ProviderEventSink | undefined;
       callerSignal?: AbortSignal | undefined;
@@ -1562,10 +1663,7 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
       errorKind: providerError.kind,
       providerData: providerErrorData(providerError),
     });
-    // Thrown errors must not carry the events-only synthetic handle (see
-    // withEventsOnlySessionHandle): the orchestrator persists it from the
-    // error and resume would then demand session_resume support.
-    return withEventsOnlySessionHandle(providerError);
+    return providerError;
   }
 }
 
