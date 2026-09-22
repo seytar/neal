@@ -1340,7 +1340,7 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
         await this.emitSessionStarted({ sessionHandle, events: args.events });
       }
 
-      const operation = this.beginOrResumeOperation(prepared.state, {
+      const operation = this.beginOrResumeOperation(prepared.state, sessionHandle, {
         kind: 'prompt',
         label: null,
       });
@@ -1426,7 +1426,7 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
         await this.emitSessionStarted({ sessionHandle, label: args.label, events: args.events });
       }
 
-      const operation = this.beginOrResumeOperation(prepared.state, {
+      const operation = this.beginOrResumeOperation(prepared.state, sessionHandle, {
         kind: 'structured_prompt',
         label: args.label,
       });
@@ -1484,6 +1484,7 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
 
   private beginOrResumeOperation(
     state: AgentLoopState,
+    sessionHandle: string,
     expected: Pick<OpenAICompatibleCoderOperation, 'kind' | 'label'>,
   ): OpenAICompatibleCoderOperation {
     const record = state.persistentSession?.record;
@@ -1494,7 +1495,7 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
     if (active) {
       if (active.kind !== expected.kind || active.label !== expected.label) {
         throw this.sessionUnavailable(
-          null,
+          sessionHandle,
           `active operation is ${active.kind}/${JSON.stringify(active.label)}, expected ` +
             `${expected.kind}/${JSON.stringify(expected.label)}`,
         );
