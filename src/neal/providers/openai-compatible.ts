@@ -36,8 +36,8 @@
  *   relying on Neal-inlined context.
  */
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import {
@@ -51,6 +51,7 @@ import {
   type ToolSet,
 } from 'ai';
 
+import { writeJsonAtomic } from '../atomic-write.js';
 import { getOpenAICompatibleSettings, type OpenAICompatibleSettings } from '../config.js';
 import { withOpenRouterRouting } from './openrouter-routing.js';
 import { resolveRateCost, type ProviderPricing } from './pricing.js';
@@ -321,11 +322,7 @@ async function writePersistentCoderSession(
   sessionHandle: string,
   record: OpenAICompatibleCoderSessionRecord,
 ) {
-  const path = getPersistentCoderSessionPath(cwd, sessionHandle);
-  await mkdir(dirname(path), { recursive: true });
-  const tmpPath = `${path}.tmp-${process.pid}-${randomBytes(4).toString('hex')}`;
-  await writeFile(tmpPath, JSON.stringify(record, null, 2) + '\n', 'utf8');
-  await rename(tmpPath, path);
+  await writeJsonAtomic(getPersistentCoderSessionPath(cwd, sessionHandle), record);
 }
 
 function withEventsOnlySessionHandle(error: NealProviderError): NealProviderError {
