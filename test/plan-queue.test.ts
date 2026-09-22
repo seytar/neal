@@ -4,6 +4,8 @@ import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import YAML from 'yaml';
+
 import { writeJsonAtomic, writeTextAtomic } from '../src/neal/atomic-write.js';
 import {
   continuePlanAndExecuteQueueFromChildRun,
