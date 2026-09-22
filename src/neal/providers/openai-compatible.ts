@@ -857,7 +857,10 @@ function setPersistentOperationStage(
 async function runAgentToolLoop(
   ctx: AgentTurnContext,
   prompt: string,
-  options: { resumeActiveOperation?: boolean } = {},
+  options: {
+    resumeActiveOperation?: boolean;
+    persistentCompletion?: 'clear_operation' | 'finalization_pending';
+  } = {},
 ): Promise<string> {
   if (!options.resumeActiveOperation) {
     ctx.state.messages.push({ role: 'user', content: prompt });
@@ -877,6 +880,13 @@ async function runAgentToolLoop(
     }
     const turn = await runAgentModelTurn(ctx, { useTools: true });
     ctx.state.messages.push(...turn.responseMessages);
+    if (turn.toolCallCount === 0 && ctx.state.persistentSession?.record.activeOperation) {
+      if (options.persistentCompletion === 'clear_operation') {
+        ctx.state.persistentSession.record.activeOperation = null;
+      } else if (options.persistentCompletion === 'finalization_pending') {
+        ctx.state.persistentSession.record.activeOperation.stage = 'finalization_pending';
+      }
+    }
     await persistAgentLoopSession(ctx.state);
     if (turn.toolCallCount > 0) {
       // Completion is structural only: a model that narrates completion
@@ -1365,10 +1375,11 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
           events: args.events,
         },
         args.prompt,
-        { resumeActiveOperation: prepared.resumedActiveOperation },
+        {
+          resumeActiveOperation: prepared.resumedActiveOperation,
+          persistentCompletion: 'clear_operation',
+        },
       );
-      prepared.state.persistentSession!.record.activeOperation = null;
-      await persistAgentLoopSession(prepared.state);
       return { sessionHandle, finalResponse };
     } catch (error) {
       throw await this.surfaceError(error, {
@@ -1445,10 +1456,11 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
         await runAgentToolLoop(
           turnContext,
           appendResponseShapeHint(args.prompt, protocol),
-          { resumeActiveOperation: prepared.resumedActiveOperation },
+          {
+            resumeActiveOperation: prepared.resumedActiveOperation,
+            persistentCompletion: 'finalization_pending',
+          },
         );
-        setPersistentOperationStage(prepared.state, 'finalization_pending');
-        await persistAgentLoopSession(prepared.state);
       }
 
       const currentStage = prepared.state.persistentSession!.record.activeOperation?.stage;
