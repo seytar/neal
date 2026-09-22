@@ -22,10 +22,11 @@
  *   turn carries `output: Output.object(...)` (see
  *   `runStructuredFinalizationTurn`, shared by both paths); there are no
  *   fence instructions and no repair turns on this provider;
- * - events-only synthetic session handles: `supportsSessionResume: false`,
- *   so `args.onSessionStarted` is never invoked, returned session handles
- *   are always null, and a non-null `args.resumeHandle` is corrupted state
- *   (`session_unavailable`);
+ * - Neal-owned resumable coder sessions: the explicit AI SDK message history
+ *   is persisted under `.neal/provider-sessions/openai-compatible/` behind
+ *   an opaque session handle. Coder/planner turns resume through Neal's normal
+ *   `resumeHandle` contract; scope boundaries still clear the handle, so each
+ *   new scope starts with fresh context;
  * - a structured-advisor adapter running the same outer loop over the
  *   read-only toolset (`read_file`, `list_dir`, `grep`, `git_diff`) with its own smaller
  *   step cap (`OPENAI_COMPATIBLE_ADVISOR_MAX_STEPS`), the same settings
@@ -35,6 +36,8 @@
  *   relying on Neal-inlined context.
  */
 import { randomBytes } from 'node:crypto';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import {
@@ -194,21 +197,140 @@ function createOpenAICompatibleProviderError(args: {
   });
 }
 
+type OpenAICompatibleCoderOperationStage =
+  | 'tool_loop'
+  | 'finalization_pending'
+  | 'finalization';
+
+type OpenAICompatibleCoderOperation = {
+  kind: 'prompt' | 'structured_prompt';
+  label: string | null;
+  stage: OpenAICompatibleCoderOperationStage;
+};
+
+type OpenAICompatibleCoderSessionRecord = {
+  version: 1;
+  modelSlug: string;
+  structuredOutputMode: NonNullable<OpenAICompatibleSettings['structuredOutputMode']>;
+  messages: ModelMessage[];
+  activeOperation: OpenAICompatibleCoderOperation | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const OPENAI_COMPATIBLE_CODER_SESSION_HANDLE_PATTERN =
+  /^openai-compatible:v1:([a-f0-9]{24})$/;
+
+function buildPersistentCoderSessionHandle() {
+  return `${OPENAI_COMPATIBLE_PROVIDER_ID}:v1:${randomBytes(12).toString('hex')}`;
+}
+
 function buildSyntheticSessionHandle() {
-  // Synthetic events-only handle. This provider has no session resume;
-  // adapter methods always return sessionHandle: null and never invoke
-  // onSessionStarted, so no resumable handle is ever persisted for it.
+  // Structured-advisor sessions remain events-only and stateless.
   return `${OPENAI_COMPATIBLE_PROVIDER_ID}:${new Date().toISOString()}:${randomBytes(4).toString('hex')}`;
 }
 
+function getPersistentCoderSessionPath(cwd: string, sessionHandle: string) {
+  const match = OPENAI_COMPATIBLE_CODER_SESSION_HANDLE_PATTERN.exec(sessionHandle);
+  if (!match) {
+    throw new Error(`invalid OpenAI-compatible coder session handle: ${JSON.stringify(sessionHandle)}`);
+  }
+  return join(cwd, '.neal', 'provider-sessions', 'openai-compatible', `${match[1]}.json`);
+}
+
+function parsePersistentCoderSessionRecord(value: unknown): OpenAICompatibleCoderSessionRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('session file must contain an object');
+  }
+  const record = value as Record<string, unknown>;
+  if (record.version !== 1) {
+    throw new Error(`unsupported session version ${JSON.stringify(record.version)}`);
+  }
+  if (typeof record.modelSlug !== 'string' || record.modelSlug.length === 0) {
+    throw new Error('session modelSlug must be a non-empty string');
+  }
+  if (record.structuredOutputMode !== 'json_schema' && record.structuredOutputMode !== 'json_object') {
+    throw new Error('session structuredOutputMode is invalid');
+  }
+  if (!Array.isArray(record.messages)) {
+    throw new Error('session messages must be an array');
+  }
+
+  let activeOperation: OpenAICompatibleCoderOperation | null = null;
+  if (record.activeOperation !== null) {
+    if (!record.activeOperation || typeof record.activeOperation !== 'object' || Array.isArray(record.activeOperation)) {
+      throw new Error('session activeOperation must be an object or null');
+    }
+    const operation = record.activeOperation as Record<string, unknown>;
+    if (operation.kind !== 'prompt' && operation.kind !== 'structured_prompt') {
+      throw new Error('session activeOperation.kind is invalid');
+    }
+    if (operation.label !== null && typeof operation.label !== 'string') {
+      throw new Error('session activeOperation.label is invalid');
+    }
+    if (
+      operation.stage !== 'tool_loop' &&
+      operation.stage !== 'finalization_pending' &&
+      operation.stage !== 'finalization'
+    ) {
+      throw new Error('session activeOperation.stage is invalid');
+    }
+    activeOperation = {
+      kind: operation.kind,
+      label: operation.label as string | null,
+      stage: operation.stage,
+    };
+  }
+
+  if (typeof record.createdAt !== 'string' || typeof record.updatedAt !== 'string') {
+    throw new Error('session timestamps are invalid');
+  }
+
+  return {
+    version: 1,
+    modelSlug: record.modelSlug,
+    structuredOutputMode: record.structuredOutputMode,
+    messages: record.messages as ModelMessage[],
+    activeOperation,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
+}
+
+async function readPersistentCoderSession(cwd: string, sessionHandle: string) {
+  const path = getPersistentCoderSessionPath(cwd, sessionHandle);
+  try {
+    const raw = await readFile(path, 'utf8');
+    return parsePersistentCoderSessionRecord(JSON.parse(raw) as unknown);
+  } catch (error) {
+    throw createOpenAICompatibleProviderError({
+      message:
+        `openai-compatible coder session ${JSON.stringify(sessionHandle)} is unavailable or invalid: ` +
+        describeError(error),
+      role: 'coder',
+      sessionHandle,
+      kind: 'session_unavailable',
+      retryable: false,
+      cause: error,
+    });
+  }
+}
+
+async function writePersistentCoderSession(
+  cwd: string,
+  sessionHandle: string,
+  record: OpenAICompatibleCoderSessionRecord,
+) {
+  const path = getPersistentCoderSessionPath(cwd, sessionHandle);
+  await mkdir(dirname(path), { recursive: true });
+  const tmpPath = `${path}.tmp-${process.pid}-${randomBytes(4).toString('hex')}`;
+  await writeFile(tmpPath, JSON.stringify(record, null, 2) + '\n', 'utf8');
+  await rename(tmpPath, path);
+}
+
 function withEventsOnlySessionHandle(error: NealProviderError): NealProviderError {
-  // The synthetic session handle is events-only telemetry and must never ride
-  // on thrown errors: the orchestrator persists `error.sessionHandle` into
-  // `state.coderSessionHandle` on coder-phase and final-completion failures
-  // (src/neal/orchestrator/phases/coder.ts, src/neal/orchestrator/completion.ts),
-  // and any persisted handle makes `assertAgentConfigSupportsResume` demand
-  // session_resume support — which this provider declares false — rejecting
-  // `neal resume` for the whole run.
+  // Structured-advisor sessions are telemetry-only. They still must not leak
+  // their synthetic handle into durable writer state.
   if (error.sessionHandle === null) {
     return error;
   }
