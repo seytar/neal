@@ -703,6 +703,10 @@ type AgentLoopState = {
   modelSlug: string;
   tools: ToolSet;
   messages: ModelMessage[];
+  persistentSession?: {
+    record: OpenAICompatibleCoderSessionRecord;
+    save: () => Promise<void>;
+  };
   structuredOutputMode: NonNullable<OpenAICompatibleSettings['structuredOutputMode']>;
   toolCalls: Record<string, number>;
   toolErrors: Record<string, number>;
@@ -837,8 +841,31 @@ function forwardAgentToolEvent(
  * and self-corrects or runs into the step cap. That native feedback behavior
  * is the whole strict-input contract; no coercion or repair hook wraps it.
  */
-async function runAgentToolLoop(ctx: AgentTurnContext, prompt: string): Promise<string> {
-  ctx.state.messages.push({ role: 'user', content: prompt });
+async function persistAgentLoopSession(state: AgentLoopState) {
+  if (state.persistentSession) {
+    state.persistentSession.record.updatedAt = new Date().toISOString();
+    await state.persistentSession.save();
+  }
+}
+
+function setPersistentOperationStage(
+  state: AgentLoopState,
+  stage: OpenAICompatibleCoderOperationStage,
+) {
+  if (state.persistentSession?.record.activeOperation) {
+    state.persistentSession.record.activeOperation.stage = stage;
+  }
+}
+
+async function runAgentToolLoop(
+  ctx: AgentTurnContext,
+  prompt: string,
+  options: { resumeActiveOperation?: boolean } = {},
+): Promise<string> {
+  if (!options.resumeActiveOperation) {
+    ctx.state.messages.push({ role: 'user', content: prompt });
+    await persistAgentLoopSession(ctx.state);
+  }
   while (true) {
     if (ctx.state.steps >= ctx.stepCap.limit) {
       throw createOpenAICompatibleProviderError({
@@ -853,6 +880,7 @@ async function runAgentToolLoop(ctx: AgentTurnContext, prompt: string): Promise<
     }
     const turn = await runAgentModelTurn(ctx, { useTools: true });
     ctx.state.messages.push(...turn.responseMessages);
+    await persistAgentLoopSession(ctx.state);
     if (turn.toolCallCount > 0) {
       // Completion is structural only: a model that narrates completion
       // while still calling tools keeps looping until it makes a turn with
@@ -1214,6 +1242,7 @@ async function runStructuredFinalizationTurn<TStructured>(args: {
   protocol: StructuredJsonProtocolSpec<TStructured>;
   /** The spec's schema, narrowed to its object form by the caller's guard. */
   schema: Record<string, unknown>;
+  resumeActiveOperation?: boolean;
 }): Promise<TStructured> {
   const { ctx, protocol, schema } = args;
   // The schema (and example payload, when the spec provides one) rides in the
@@ -1230,18 +1259,25 @@ async function runStructuredFinalizationTurn<TStructured>(args: {
   if (protocol.examplePayload !== undefined) {
     promptLines.push('', 'Example payload:', JSON.stringify(protocol.examplePayload, null, 2));
   }
-  ctx.state.messages.push({ role: 'user', content: promptLines.join('\n') });
+  if (!args.resumeActiveOperation) {
+    setPersistentOperationStage(ctx.state, 'finalization');
+    ctx.state.messages.push({ role: 'user', content: promptLines.join('\n') });
+    await persistAgentLoopSession(ctx.state);
+  }
 
   const turn = await runAgentModelTurn(ctx, {
     useTools: false,
     structuredOutput: { schema, schemaLabel: protocol.schemaLabel },
   });
   ctx.state.messages.push(...turn.responseMessages);
+  await persistAgentLoopSession(ctx.state);
 
   let structured: TStructured;
   try {
     structured = protocol.validator(turn.structuredOutput);
   } catch (validationError) {
+    setPersistentOperationStage(ctx.state, 'finalization_pending');
+    await persistAgentLoopSession(ctx.state);
     throw createOpenAICompatibleProviderError({
       message:
         `openai-compatible ${ctx.label ?? ctx.role} finalization payload failed "${protocol.schemaLabel}" ` +
