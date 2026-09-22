@@ -1860,7 +1860,7 @@ export const openAICompatibleProviderDefinition = {
     coder: {
       supported: true,
       toolAccess: { read: true, write: true, shell: true },
-      supportsSessionResume: false,
+      supportsSessionResume: true,
       supportsModelOverride: true,
       supportsStructuredOutput: true,
       supportsShellDisable: true,
