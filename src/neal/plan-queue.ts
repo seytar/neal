@@ -985,13 +985,15 @@ async function writeOpenAICompatibleStepLimitSnapshot(cwd: string, queueId: stri
         const values = neal as Record<string, unknown>;
         if (Object.prototype.hasOwnProperty.call(values, 'openai_compatible_max_steps')) {
           const value = values.openai_compatible_max_steps;
-          snapshot.openai_compatible_max_steps =
-            typeof value === 'number' || value === null ? value : undefined;
+          if (typeof value === 'number' || value === null) {
+            snapshot.openai_compatible_max_steps = value;
+          }
         }
         if (Object.prototype.hasOwnProperty.call(values, 'openai_compatible_advisor_max_steps')) {
           const value = values.openai_compatible_advisor_max_steps;
-          snapshot.openai_compatible_advisor_max_steps =
-            typeof value === 'number' || value === null ? value : undefined;
+          if (typeof value === 'number' || value === null) {
+            snapshot.openai_compatible_advisor_max_steps = value;
+          }
         }
       }
     }
