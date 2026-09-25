@@ -594,8 +594,10 @@ function ActionPanel({
           The refined plan is ready for execution. Shadow is the safer default for the sanitized checkout workflow.
         </p>
         <CommandLine
-          command={'neal shadow execute ' + JSON.stringify(status.planDoc)}
-          label="Shadow will run"
+          command={preferredExecutionMode === 'normal'
+            ? detail.executionCommands?.normal
+            : detail.executionCommands?.shadow}
+          label={preferredExecutionMode === 'normal' ? 'Normal will run' : 'Shadow will run'}
         />
         <div className="actions">
           <ActionButton
