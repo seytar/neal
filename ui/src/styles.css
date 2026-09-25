@@ -1369,3 +1369,15 @@ pre { font-size: 11px; }
 
 .commands-head strong { font-size: 14px; }
 .commands-head span { font-size: 10px; }
+
+
+.live-state small {
+  display: block;
+  margin-top: 2px;
+  color: #7f90a1;
+  font: 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.new-run-progress strong {
+  font-variant-numeric: tabular-nums;
+}
