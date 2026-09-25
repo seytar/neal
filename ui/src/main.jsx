@@ -108,6 +108,109 @@ function SourceStrip({ sources }) {
   );
 }
 
+function CommandLine({ command, label = 'Command' }) {
+  if (!command) {
+    return null;
+  }
+  return (
+    <div className="command-line">
+      <span>{label}</span>
+      <code title={command}>{command}</code>
+      <CopyPathButton path={command} />
+    </div>
+  );
+}
+
+function CommandsPanel({ catalog, open, onClose }) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="commands-backdrop" onClick={onClose}>
+      <aside className="commands-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="commands-head">
+          <div>
+            <strong>Neal commands</strong>
+            <span>v{catalog?.version || '?'}</span>
+          </div>
+          <button type="button" className="panel-close" onClick={onClose}>×</button>
+        </div>
+
+        <div className="command-catalog">
+          {(catalog?.commands || []).map((command) => (
+            <div className="catalog-command" key={command}>
+              <code>{command}</code>
+              <CopyPathButton path={command} />
+            </div>
+          ))}
+        </div>
+
+        <details className="help-details">
+          <summary>Full neal help</summary>
+          <pre>{catalog?.helpText || 'Loading...'}</pre>
+        </details>
+      </aside>
+    </div>
+  );
+}
+
+function LiveActivity({ activity, loading }) {
+  const running = activity?.action?.status === 'running' || activity?.status === 'running';
+  const events = activity?.events || [];
+  const recent = events.slice(-8).reverse();
+
+  return (
+    <section className="live-strip">
+      <div className="live-primary">
+        <div className="live-state">
+          {running || loading ? <span className="pulse" /> : <span className="live-dot" />}
+          <div>
+            <span>Current</span>
+            <strong>{activity?.phase || (loading ? 'Loading…' : 'n/a')}</strong>
+          </div>
+        </div>
+
+        <div className="live-item">
+          <span>Last event</span>
+          <strong>{activity?.lastMeaningfulEvent?.summary || recent[0]?.summary || 'No recent event'}</strong>
+        </div>
+
+        <div className="live-item next-live">
+          <span>Next</span>
+          <strong>{activity?.nextAction || 'Waiting for run state…'}</strong>
+        </div>
+      </div>
+
+      {activity?.action?.command ? (
+        <CommandLine command={activity.action.command} label={activity.action.status === 'running' ? 'Running' : 'Last command'} />
+      ) : null}
+
+      {recent.length ? (
+        <details className="activity-events">
+          <summary>Recent activity ({events.length})</summary>
+          <div className="event-list">
+            {recent.map((event, index) => (
+              <div className="event-row" key={(event.ts || '') + event.type + index}>
+                <time>{event.ts ? new Date(event.ts).toLocaleTimeString() : '--:--:--'}</time>
+                <code>{event.type}</code>
+                <span>{event.summary}</span>
+              </div>
+            ))}
+          </div>
+          <SourceStrip
+            sources={[{
+              label: 'Activity source',
+              path: activity.path,
+              info: 'Live activity is tailed directly from this run events.ndjson file.',
+            }]}
+          />
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
 function StatusPill({ lane }) {
   return <span className={'pill ' + lane}>{laneLabel(lane)}</span>;
 }
@@ -171,6 +274,7 @@ function ActionPanel({
 }) {
   const status = detail.status;
   const runningAction = detail.action?.status === 'running';
+  const runId = status.runId;
 
   if (runningAction) {
     return (
@@ -183,6 +287,7 @@ function ActionPanel({
           <span className="pulse" />
           Writer action in progress
         </div>
+        <CommandLine command={detail.action?.command} label="Running" />
       </section>
     );
   }
@@ -205,6 +310,10 @@ function ActionPanel({
           placeholder="private build and tests passed"
         />
 
+        <CommandLine
+          command={'neal shadow accept --run ' + runId + ' --note ' + JSON.stringify(validationNote.trim() || 'private validation passed via Neal UI')}
+          label="Will run"
+        />
         <div className="actions">
           <ActionButton
             kind="success"
@@ -227,6 +336,10 @@ function ActionPanel({
           value={feedback}
           onChange={(event) => setFeedback(event.target.value)}
           placeholder="Sanitized private validation failure..."
+        />
+        <CommandLine
+          command={'neal shadow feedback --run ' + runId + ' --file <temporary-sanitized-feedback-file>'}
+          label="Will run"
         />
         <div className="actions">
           <ActionButton
@@ -254,6 +367,7 @@ function ActionPanel({
           </div>
         ) : null}
 
+        <CommandLine command={status.manualGate.resumeCommand} label="Will run" />
         <div className="actions">
           <ActionButton
             kind="primary"
@@ -305,6 +419,12 @@ function ActionPanel({
           onChange={(event) => setGuidance(event.target.value)}
           placeholder="Tell Neal what decision to apply..."
         />
+        <CommandLine
+          command={guidance.trim()
+            ? 'neal resume --run ' + runId + ' --message ' + JSON.stringify(guidance.trim())
+            : 'neal resume --run ' + runId + ' --message "..."'}
+          label="Will run"
+        />
         <div className="actions">
           <ActionButton
             kind="primary"
@@ -325,6 +445,7 @@ function ActionPanel({
         <p className="body-copy">
           Neal has operator guidance ready to process.
         </p>
+        <CommandLine command={'neal resume --run ' + runId} label="Will run" />
         <ActionButton kind="primary" onClick={() => onAction('resume')}>
           Continue
         </ActionButton>
@@ -337,6 +458,7 @@ function ActionPanel({
       <section className="card">
         <h2>Run can continue</h2>
         <p className="body-copy">{status.resumeDecision.reason}</p>
+        <CommandLine command={status.resumeDecision.resumeCommand || ('neal resume --run ' + runId)} label="Will run" />
         <ActionButton kind="primary" onClick={() => onAction('resume')}>
           Resume
         </ActionButton>
@@ -703,6 +825,10 @@ function App() {
   const [feedback, setFeedback] = useState('');
   const [validationNote, setValidationNote] = useState('');
   const [error, setError] = useState(null);
+  const [commandCatalog, setCommandCatalog] = useState(null);
+  const [commandsOpen, setCommandsOpen] = useState(false);
+  const [activity, setActivity] = useState(null);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   const selectedExists = useMemo(
     () => runs.some((run) => run.runId === selectedRunId),
@@ -762,6 +888,12 @@ function App() {
   }, [selectedRunId, selectedTab]);
 
   useEffect(() => {
+    void api('/api/commands')
+      .then(setCommandCatalog)
+      .catch((nextError) => setError(nextError.message));
+  }, []);
+
+  useEffect(() => {
     void refreshRuns();
     const timer = setInterval(() => void refreshRuns(), POLL_MS);
     return () => clearInterval(timer);
@@ -785,6 +917,40 @@ function App() {
     const timer = setInterval(() => void refreshDetail(), POLL_MS);
     return () => clearInterval(timer);
   }, [selectedRunId, refreshDetail]);
+
+  useEffect(() => {
+    if (!selectedRunId) {
+      setActivity(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const refreshActivity = async () => {
+      setActivityLoading(true);
+      try {
+        const data = await api('/api/runs/' + encodeURIComponent(selectedRunId) + '/activity');
+        if (!cancelled) {
+          setActivity(data);
+        }
+      } catch (nextError) {
+        if (!cancelled) {
+          setError(nextError.message);
+        }
+      } finally {
+        if (!cancelled) {
+          setActivityLoading(false);
+        }
+      }
+    };
+
+    void refreshActivity();
+    const timer = setInterval(() => void refreshActivity(), POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [selectedRunId]);
+
 
   useEffect(() => {
     if (selectedRunId) {
@@ -833,7 +999,13 @@ function App() {
     return (
       <div className="layout">
         <RunList runs={runs} selectedRunId={selectedRunId} onSelect={setSelectedRunId} />
-        <main className="main"><div className="empty">No Neal runs found in this project.</div></main>
+        <CommandsPanel
+        catalog={commandCatalog}
+        open={commandsOpen}
+        onClose={() => setCommandsOpen(false)}
+      />
+
+      <main className="main"><div className="empty">No Neal runs found in this project.</div></main>
       </div>
     );
   }
@@ -858,7 +1030,12 @@ function App() {
                 <h1>{basename(detail.status.planDoc)}</h1>
                 <span className="run-id">{detail.status.runId}</span>
               </div>
-              <StatusPill lane={detail.uiLane} />
+              <div className="top-actions">
+                <button type="button" className="button compact" onClick={() => setCommandsOpen(true)}>
+                  Commands
+                </button>
+                <StatusPill lane={detail.uiLane} />
+              </div>
             </header>
 
             {detail.action?.status === 'failed' ? (
@@ -866,6 +1043,8 @@ function App() {
                 Last UI action failed: {detail.action.error}
               </div>
             ) : null}
+
+            <LiveActivity activity={activity} loading={activityLoading} />
 
             <div className="detail-grid">
               <ActionPanel
