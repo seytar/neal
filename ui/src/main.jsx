@@ -62,7 +62,16 @@ function formatNumber(value) {
 }
 
 function formatCost(value) {
-  return typeof value === 'number' ? '
+  return typeof value === 'number' ? '$' + value.toFixed(4) : 'n/a';
+}
+
+function formatElapsed(elapsedMs) {
+  const totalSeconds = Math.max(0, Math.round(Number(elapsedMs || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+}
+
 function InfoTip({ text }) {
   return (
     <span className="info-tip" title={text} aria-label={text}>
