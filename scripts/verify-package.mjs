@@ -12,6 +12,7 @@ const expectedBinPath = 'dist/neal/index.js';
 export const requiredPackageEntries = [
   'package/package.json',
   'package/dist/neal/index.js',
+  'package/dist/neal/ui-web/index.html',
   'package/README.md',
   'package/LICENSE',
   'package/neal.yml',
@@ -34,6 +35,7 @@ const requiredHelpFragments = [
   'or: neal execute <plan.md> [--no-squash]',
   'or: neal run [--no-squash] <plan.md> [more-plans...]',
   'or: neal status [--json] [--run <run-id>]',
+  'or: neal ui [--port <port>] [--no-open]',
   'or: neal check',
   'or: neal squash [plan.md]',
   'or: neal version',
@@ -195,6 +197,12 @@ async function main() {
   for (const requiredEntry of requiredPackageEntries) {
     assert(tarEntrySet.has(requiredEntry), `Expected package tarball to include ${requiredEntry}`);
   }
+  assert(
+    tarEntries.some(
+      (entry) => entry.startsWith('package/dist/neal/ui-web/assets/') && entry.endsWith('.js'),
+    ),
+    'Expected package tarball to include the built Neal UI JavaScript asset',
+  );
 
   const forbiddenEntries = collectForbiddenPackageEntries(tarEntries);
   assert(
