@@ -20,6 +20,7 @@ import { runShadowCommand } from './commands/shadow.js';
 import { runSquashCommand } from './commands/squash.js';
 import { runStatusCommand } from './commands/status.js';
 import { runUsageCommand } from './commands/usage.js';
+import { runUiCommand } from './commands/ui.js';
 import {
   formatWriterProviderSetupRequiredLines,
   isWriterProvidersNotConfiguredError,
@@ -88,6 +89,11 @@ async function main() {
 
   if (args[0] === 'changes') {
     await runChangesCommand(args);
+    return;
+  }
+
+  if (args[0] === 'ui') {
+    await runUiCommand(args);
     return;
   }
 
