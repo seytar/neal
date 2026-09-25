@@ -11,6 +11,7 @@ import { writeCheckpointRetrospective } from '../retrospective.js';
 import { acquireActiveRunLock } from '../run-lock.js';
 import { acceptShadowPrivateValidation, reopenShadowRunFromPrivateFeedback } from '../shadow-mode.js';
 import { saveState } from '../state.js';
+import type { ShadowExecutionPolicy } from '../types.js';
 import { runNewRunCommand } from './new-run.js';
 import { executeRun, resolveWriterRunSelection, withActiveRunLock } from './runtime.js';
 import { getExecuteRunResultExitCode, setWriterCommandExitCode } from './writer-exit-codes.js';
@@ -19,6 +20,28 @@ const MAX_PRIVATE_FEEDBACK_BYTES = 64 * 1024;
 
 type ShadowAcceptArgs = { runId: string | null; note: string | null };
 type ShadowFeedbackArgs = { runId: string | null; file: string | null };
+type ShadowExecuteArgs = { forwardedArgs: string[]; policy: ShadowExecutionPolicy };
+
+function parseShadowExecuteArgs(args: string[]): ShadowExecuteArgs {
+  const forwardedArgs = ['execute'];
+  let policy: ShadowExecutionPolicy = 'verify';
+  let explicitPolicy: ShadowExecutionPolicy | null = null;
+
+  for (const arg of args.slice(2)) {
+    if (arg === '--strict' || arg === '--verify') {
+      const nextPolicy: ShadowExecutionPolicy = arg === '--strict' ? 'strict' : 'verify';
+      if (explicitPolicy !== null && explicitPolicy !== nextPolicy) {
+        throw new Error('neal shadow execute accepts only one of --verify or --strict.');
+      }
+      explicitPolicy = nextPolicy;
+      policy = nextPolicy;
+      continue;
+    }
+    forwardedArgs.push(arg);
+  }
+
+  return { forwardedArgs, policy };
+}
 
 function parseShadowAcceptArgs(args: string[]): ShadowAcceptArgs {
   let runId: string | null = null;
@@ -190,9 +213,14 @@ async function acceptPrivateValidation(args: string[]) {
 export async function runShadowCommand(args: string[]): Promise<void> {
   if (args[0] !== 'shadow') throw new Error(`Unknown argument: ${args[0] ?? ''}`);
   switch (args[1]) {
-    case 'execute':
-      await runNewRunCommand(['execute', ...args.slice(2)], { executionProfile: 'shadow' });
+    case 'execute': {
+      const parsed = parseShadowExecuteArgs(args);
+      await runNewRunCommand(parsed.forwardedArgs, {
+        executionProfile: 'shadow',
+        shadowExecutionPolicy: parsed.policy,
+      });
       return;
+    }
     case 'feedback':
       await processPrivateValidationFeedback(args);
       return;
@@ -201,7 +229,7 @@ export async function runShadowCommand(args: string[]): Promise<void> {
       return;
     default:
       throw new Error(
-        'Usage: neal shadow execute <plan.md> [--no-squash] | ' +
+        'Usage: neal shadow execute <plan.md> [--verify|--strict] [--no-squash] | ' +
           'neal shadow feedback --file <sanitized-feedback.txt> [--run <run-id>] | ' +
           'neal shadow accept [--run <run-id>] [--note "..."]',
       );
