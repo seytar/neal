@@ -144,16 +144,30 @@ strength is adapter-specific and mechanical where each SDK allows it:
 Rounds without a `toolPolicy` are unaffected on every adapter: ordinary coder
 scope rounds keep full access because verification legitimately runs commands.
 
-Shadow execute rounds deliberately do carry a no-shell policy. Shadow eligibility
-is capability-based: `assertAgentConfigSupportsShadowRun` requires a writable
-structured coder whose adapter declares `supportsShellDisable: true`. Every
-Shadow coder surface receives `allowRun: false`; the registry rejects an
-adapter that cannot mechanically enforce it. Current built-in behavior is:
+Shadow execute rounds deliberately carry a mechanically enforced command
+policy. Shadow eligibility is capability-based:
+`assertAgentConfigSupportsShadowRun` requires a writable structured coder whose
+adapter declares `supportsShellDisable: true`; the registry rejects an adapter
+that cannot enforce the Shadow command boundary.
 
-- `anthropic-claude`: eligible; `Bash` is removed from the coder tool list.
-- `openai-compatible`: eligible; the neal-owned toolset omits `run`.
+New Shadow runs default to `verify`. Neal extracts only safe commands explicitly
+written as inline code in the active scope's `Verification:` field, then passes
+that exact allowlist to the coder adapter. Commands with shell chaining or
+redirection, shell wrappers, migrations, service/app startup, deploys, network
+probes, and other live/runtime operations are rejected before they enter the
+allowlist. `--strict` preserves the historical behavior and supplies
+`allowRun: false`. Legacy Shadow runs without a persisted policy hydrate as
+`strict`.
+
+Current built-in behavior is:
+
+- `anthropic-claude`: eligible; strict removes `Bash`, while verify installs a
+  PreToolUse guard that permits only exact Neal-approved verification commands.
+- `openai-compatible`: eligible; strict disables the `run` tool, while verify
+  keeps it behind an exact Neal-approved command allowlist.
 - `openai-codex`: not currently eligible; `workspace-write` can constrain
-  writes but still exposes command execution.
+  writes but does not provide the mechanical per-command boundary Shadow
+  requires.
 
 This list describes current implementations, not a provider allowlist. A future
 adapter becomes Shadow-eligible by satisfying the same capability contract.
