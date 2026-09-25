@@ -1772,3 +1772,152 @@ pre { font-size: 11px; }
 .config-source-wrap .info-tip {
   margin-left: 0;
 }
+
+
+/* Readability and operator-review usability */
+.sidebar {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.brand-row {
+  flex-wrap: wrap;
+}
+
+.sidebar-mini-actions {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sidebar-command-button {
+  margin-left: 0;
+  font-size: 9px;
+}
+
+.subtitle,
+.muted { font-size: 11px; }
+
+.run-head {
+  align-items: flex-start;
+}
+
+.run-title {
+  overflow: visible;
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.run-meta-line {
+  flex-wrap: wrap;
+  overflow: visible;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.run-meta-line span:last-child {
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
+.pill { font-size: 9px; }
+
+h1 { font-size: 18px; }
+h2 { font-size: 14px; }
+
+.body-copy { font-size: 12px; }
+
+.notice,
+.error-box,
+.global-error { font-size: 11px; }
+
+.field-label { font-size: 11px; }
+
+textarea,
+.text-input { font-size: 12px; }
+
+.button { font-size: 11px; }
+
+.option-title { font-size: 11px; }
+.option-description { font-size: 10px; }
+
+.fact-strip span,
+.next-compact > span { font-size: 9px; }
+
+.fact-strip strong { font-size: 11px; }
+.model-compact > div { font-size: 10px; }
+.next-compact p { font-size: 10px; }
+.tab { font-size: 10px; }
+pre { font-size: 11px; }
+.empty { font-size: 12px; }
+.activity { font-size: 11px; }
+
+.source-label { font-size: 9px; }
+.source-row code { font-size: 10px; }
+.path-copy { font-size: 9px; }
+
+.markdown-preview {
+  font-size: 12px;
+  line-height: 1.58;
+}
+
+.markdown-preview code { font-size: 11px; }
+
+.metric > span { font-size: 9px; }
+.metric > strong { font-size: 13px; }
+.section-title { font-size: 11px; }
+.empty-inline { font-size: 11px; }
+
+.command-line > span { font-size: 9px; }
+.command-line code { font-size: 10px; }
+
+.live-state span:not(.pulse),
+.live-item > span { font-size: 9px; }
+
+.live-state strong,
+.live-item strong { font-size: 11px; }
+
+.activity-events { font-size: 10px; }
+.event-row time,
+.event-row code { font-size: 9px; }
+.event-row span { font-size: 10px; }
+
+.commands-head strong { font-size: 14px; }
+.commands-head span { font-size: 10px; }
+
+.review-shortcuts {
+  display: grid;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 8px;
+  background: #101720;
+  border: 1px solid #2a3542;
+  border-radius: 6px;
+}
+
+.review-shortcuts-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.review-shortcuts-copy strong {
+  font-size: 11px;
+}
+
+.review-shortcuts-copy span {
+  color: #9facbb;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.review-shortcuts .actions {
+  margin-top: 0;
+}
