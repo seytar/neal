@@ -14,7 +14,11 @@ import { getCoderAdapter, getProviderDefinition, getStructuredAdvisorAdapter } f
 import { createProviderTelemetrySink } from '../providers/telemetry.js';
 import { isNealProviderError, NealProviderError } from '../providers/types.js';
 import type { StructuredJsonProtocolSpec } from '../providers/types.js';
-import { applyExecutionProfilePrompt, getExecutionCoderToolPolicy } from '../shadow-mode.js';
+import {
+  applyExecutionProfilePrompt,
+  applyReviewerExecutionProfilePrompt,
+  getExecutionCoderToolPolicy,
+} from '../shadow-mode.js';
 import type {
   AgentRoleConfig,
   CoderSessionProtocol,
@@ -346,11 +350,14 @@ export async function runReviewerRound(args: {
     // structured-advisor tool access, not from inline-context presence alone.
     // The review level comes from current config (`neal.review_level`), not
     // persisted run state; the builder itself never reads config.
-    prompt: buildReviewerPrompt({
-      ...args,
-      accessMode: getReviewerDoctrineAccessMode(args.reviewer),
-      reviewLevel: getReviewLevel(args.cwd),
-    }),
+    prompt: applyReviewerExecutionProfilePrompt(
+      buildReviewerPrompt({
+        ...args,
+        accessMode: getReviewerDoctrineAccessMode(args.reviewer),
+        reviewLevel: getReviewLevel(args.cwd),
+      }),
+      args.executionProfile ?? 'normal',
+    ),
     schema,
     structuredJsonProtocol: buildStructuredJsonProtocolSpec({
       schemaLabel: 'reviewer_payload',
