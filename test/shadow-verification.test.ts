@@ -6,6 +6,7 @@ import {
   isSafeShadowVerificationCommand,
 } from '../src/neal/shadow-verification.js';
 import { buildReviewerPrompt } from '../src/neal/prompts/execute.js';
+import { applyReviewerExecutionProfilePrompt } from '../src/neal/shadow-mode.js';
 
 test('Shadow verification accepts bounded checks and rejects runtime or mutating commands', () => {
   assert.equal(isSafeShadowVerificationCommand('php -l app/Foo.php'), true);
@@ -64,7 +65,7 @@ test('Shadow verification falls back to a one-shot plan body when no numbered sc
 });
 
 test('scope reviewer defers private runtime evidence in Shadow mode', () => {
-  const prompt = buildReviewerPrompt({
+  const prompt = applyReviewerExecutionProfilePrompt(buildReviewerPrompt({
     planDoc: 'PLAN.md',
     baseCommit: '1111111',
     headCommit: '2222222',
@@ -84,7 +85,7 @@ test('scope reviewer defers private runtime evidence in Shadow mode', () => {
     scratchDir: '.neal/runs/test/reviewer-scratch',
     executionProfile: 'shadow',
     accessMode: 'read-only',
-  });
+  }), 'shadow');
 
   assert.match(prompt, /private\/live runtime validation as a later explicit gate/);
   assert.match(prompt, /not by itself a blocking finding/);
