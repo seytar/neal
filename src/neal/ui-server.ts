@@ -489,9 +489,6 @@ async function patchUiConfig(cwd: string, target: 'repo' | 'user', changes: Reco
   if (document.errors.length > 0 || (document.contents !== null && !isMap(document.contents))) {
     throw new UiHttpError(400, `Cannot edit ${path}: config is not a valid YAML mapping.`);
   }
-  if (document.contents === null) {
-    document.contents = document.createNode({});
-  }
   if (isMap(document.contents)) {
     document.contents.flow = false;
   }
