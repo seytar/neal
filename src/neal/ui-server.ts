@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { readFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
-import { dirname, extname, join, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
@@ -62,18 +62,19 @@ class UiHttpError extends Error {
   }
 }
 
-export function classifyUiRun(
-  run: Pick<
-    NealStatusListRun | NealStatusSnapshot,
-    | 'phase'
-    | 'status'
-    | 'effectiveStatus'
-    | 'waitingForOperatorGuidance'
-    | 'pendingOperatorGuidance'
-    | 'manualGate'
-    | 'resumeDecision'
-  > & { resumeDecision?: NealStatusSnapshot['resumeDecision'] },
-): NealUiLane {
+type UiClassifiableRun = Pick<
+  NealStatusListRun,
+  | 'phase'
+  | 'status'
+  | 'effectiveStatus'
+  | 'waitingForOperatorGuidance'
+  | 'pendingOperatorGuidance'
+  | 'manualGate'
+> & {
+  resumeDecision?: NealStatusSnapshot['resumeDecision'];
+};
+
+export function classifyUiRun(run: UiClassifiableRun): NealUiLane {
   if (run.phase === 'awaiting_private_validation') {
     return 'private_validation';
   }
@@ -356,11 +357,8 @@ async function serveUiAsset(
 ) {
   const relativePath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const resolvedPath = resolve(staticRoot, relativePath);
-  const relativeAssetPath = resolvedPath.slice(staticRoot.length);
-  if (
-    resolvedPath !== staticRoot &&
-    (!relativeAssetPath || (!relativeAssetPath.startsWith('/') && !relativeAssetPath.startsWith('\\\\')))
-  ) {
+  const relativeAssetPath = relative(staticRoot, resolvedPath);
+  if (relativeAssetPath.startsWith('..') || isAbsolute(relativeAssetPath)) {
     throw new UiHttpError(404, 'Asset not found.');
   }
 
