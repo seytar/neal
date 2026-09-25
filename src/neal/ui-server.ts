@@ -5,13 +5,46 @@ import { tmpdir } from 'node:os';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import YAML, { isMap } from 'yaml';
 
+import { writeTextAtomic } from './atomic-write.js';
 import { buildRunChangesSnapshot } from './changes.js';
 import { buildUsageLines } from './cli.js';
+import {
+  assertWriterProvidersConfigured,
+  clearConfigCache,
+  getAgentTurnRetryLimit,
+  getAgentTurnStartupTimeoutMs,
+  getApiRetryLimit,
+  getConfigSourceInfo,
+  getConsultantMaxAttempts,
+  getDefaultCoderEffort,
+  getDefaultCoderModel,
+  getDefaultCoderProvider,
+  getDefaultPlannerEffort,
+  getDefaultPlannerModel,
+  getDefaultPlannerProvider,
+  getDefaultReviewerEffort,
+  getDefaultReviewerModel,
+  getDefaultReviewerProvider,
+  getFinalCompletionContinueExecutionMax,
+  getInactivityTimeoutMs,
+  getInteractiveBlockedRecoveryMaxTurns,
+  getMaxReviewRounds,
+  getOpenAICompatibleAdvisorMaxSteps,
+  getOpenAICompatibleMaxSteps,
+  getOpenAICompatibleSettings,
+  getPhaseHeartbeatMs,
+  getPlanReviewDebtRoundThreshold,
+  getReviewLevel,
+  getReviewStuckWindow,
+  type NealConfigFile,
+} from './config.js';
 import { runNewRunCommand } from './commands/new-run.js';
 import { runResumeRunCommand } from './commands/resume-run.js';
 import { runShadowCommand } from './commands/shadow.js';
 import { resolveRunStatePath } from './run-registry.js';
+import { listRegisteredProviderDefinitions } from './providers/registry.js';
 import { getExecutionPlanPath, getExecutionPlanScopeCount } from './scopes.js';
 import { loadState } from './state.js';
 import { renderStatusFooterLine } from './status-footer.js';
@@ -198,6 +231,280 @@ function extractGuidanceMessage(command: string) {
     return null;
   }
   return match[1].replace(/\\([\\$"`])/g, '$1');
+}
+
+type UiConfigSource = {
+  kind: 'repo' | 'user' | 'default' | 'environment' | 'inherited';
+  path: string | null;
+  key: string;
+  note?: string;
+};
+
+function hasOwnNested(root: unknown, path: string[]) {
+  let current: unknown = root;
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || Array.isArray(current) || !Object.prototype.hasOwnProperty.call(current, key)) {
+      return false;
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+  return true;
+}
+
+function configSourceFor(
+  repoConfig: NealConfigFile,
+  userConfig: NealConfigFile,
+  sources: ReturnType<typeof getConfigSourceInfo>,
+  key: string,
+): UiConfigSource {
+  const path = key.split('.');
+  if (hasOwnNested(repoConfig, path)) {
+    return { kind: 'repo', path: sources.repo.path, key };
+  }
+  if (hasOwnNested(userConfig, path)) {
+    return { kind: 'user', path: sources.user.path, key };
+  }
+  return { kind: 'default', path: null, key };
+}
+
+function roleFieldSource(
+  role: 'planner' | 'coder' | 'reviewer',
+  field: 'provider' | 'model' | 'effort',
+  repoConfig: NealConfigFile,
+  userConfig: NealConfigFile,
+  sources: ReturnType<typeof getConfigSourceInfo>,
+): UiConfigSource {
+  const directKey = `agent.${role}.${field}`;
+  const direct = configSourceFor(repoConfig, userConfig, sources, directKey);
+  if (direct.kind !== 'default' || role !== 'planner') {
+    return direct;
+  }
+
+  const plannerProviderExplicit =
+    hasOwnNested(repoConfig, ['agent', 'planner', 'provider']) ||
+    hasOwnNested(userConfig, ['agent', 'planner', 'provider']);
+
+  if (field === 'provider' || !plannerProviderExplicit) {
+    const coder = configSourceFor(repoConfig, userConfig, sources, `agent.coder.${field}`);
+    return {
+      ...coder,
+      kind: 'inherited',
+      key: directKey,
+      note: `inherits agent.coder.${field}${coder.path ? ` from ${coder.path}` : ''}`,
+    };
+  }
+
+  return direct;
+}
+
+async function readUiConfigFile(path: string, exists: boolean): Promise<NealConfigFile> {
+  if (!exists) {
+    return {};
+  }
+  const parsed = YAML.parse(await readFile(path, 'utf8'));
+  return parsed && typeof parsed === 'object' ? parsed as NealConfigFile : {};
+}
+
+async function buildUiConfigSnapshot(cwd: string) {
+  clearConfigCache(cwd);
+  const sources = getConfigSourceInfo(cwd);
+  const [repoConfig, userConfig] = await Promise.all([
+    readUiConfigFile(sources.repo.path, sources.repo.exists),
+    readUiConfigFile(sources.user.path, sources.user.exists),
+  ]);
+
+  const openai = getOpenAICompatibleSettings(cwd);
+  const definitions = listRegisteredProviderDefinitions();
+
+  const roleValues = {
+    planner: {
+      provider: getDefaultPlannerProvider(cwd),
+      model: getDefaultPlannerModel(cwd),
+      effort: getDefaultPlannerEffort(cwd),
+    },
+    coder: {
+      provider: getDefaultCoderProvider(cwd),
+      model: getDefaultCoderModel(cwd),
+      effort: getDefaultCoderEffort(cwd),
+    },
+    reviewer: {
+      provider: getDefaultReviewerProvider(cwd),
+      model: getDefaultReviewerModel(cwd),
+      effort: getDefaultReviewerEffort(cwd),
+    },
+  };
+
+  const roles = Object.fromEntries(
+    (['planner', 'coder', 'reviewer'] as const).map((role) => [
+      role,
+      {
+        ...roleValues[role],
+        sources: {
+          provider: roleFieldSource(role, 'provider', repoConfig, userConfig, sources),
+          model: roleFieldSource(role, 'model', repoConfig, userConfig, sources),
+          effort: roleFieldSource(role, 'effort', repoConfig, userConfig, sources),
+        },
+      },
+    ]),
+  );
+
+  const runtimeValues = {
+    review_level: getReviewLevel(cwd),
+    phase_heartbeat_ms: getPhaseHeartbeatMs(cwd),
+    max_review_rounds: getMaxReviewRounds(cwd),
+    review_stuck_window: getReviewStuckWindow(cwd),
+    plan_review_debt_round_threshold: getPlanReviewDebtRoundThreshold(cwd),
+    inactivity_timeout_ms: getInactivityTimeoutMs(cwd),
+    api_retry_limit: getApiRetryLimit(cwd),
+    openai_compatible_max_steps: getOpenAICompatibleMaxSteps(cwd),
+    openai_compatible_advisor_max_steps: getOpenAICompatibleAdvisorMaxSteps(cwd),
+    agent_turn_startup_timeout_ms: getAgentTurnStartupTimeoutMs(cwd),
+    agent_turn_retry_limit: getAgentTurnRetryLimit(cwd),
+    interactive_blocked_recovery_max_turns: getInteractiveBlockedRecoveryMaxTurns(cwd),
+    final_completion_continue_execution_max: getFinalCompletionContinueExecutionMax(cwd),
+    consultant_max_attempts: getConsultantMaxAttempts(cwd),
+  };
+
+  return {
+    sources,
+    precedence: ['repo neal.yml', 'user ~/.neal/config.yml', 'built-in defaults'],
+    roles,
+    roleOptions: {
+      planner: definitions.filter((d) => d.capabilities.coder.supported).map((d) => d.id),
+      coder: definitions.filter((d) => d.capabilities.coder.supported).map((d) => d.id),
+      reviewer: definitions.filter((d) => d.capabilities['structured-advisor'].supported).map((d) => d.id),
+    },
+    providerEfforts: Object.fromEntries(
+      definitions.map((definition) => [
+        definition.id,
+        Array.from(new Set([
+          ...(definition.capabilities.coder.supportedEfforts ?? []),
+          ...(definition.capabilities['structured-advisor'].supportedEfforts ?? []),
+        ])),
+      ]),
+    ),
+    runtime: Object.fromEntries(
+      Object.entries(runtimeValues).map(([key, value]) => [
+        key,
+        {
+          value,
+          source: configSourceFor(repoConfig, userConfig, sources, `neal.${key}`),
+        },
+      ]),
+    ),
+    openaiCompatible: {
+      baseUrl: openai.baseUrl,
+      apiKeyEnv: openai.apiKeyEnv,
+      apiKeyConfigured: Boolean(openai.apiKey),
+      defaultModel: openai.defaultModel,
+      structuredOutputMode: openai.structuredOutputMode ?? null,
+      sources: {
+        baseUrl: configSourceFor(repoConfig, userConfig, sources, 'providers.openai_compatible.base_url'),
+        apiKeyEnv: configSourceFor(repoConfig, userConfig, sources, 'providers.openai_compatible.api_key_env'),
+        defaultModel: configSourceFor(repoConfig, userConfig, sources, 'providers.openai_compatible.default_model'),
+        structuredOutputMode: configSourceFor(repoConfig, userConfig, sources, 'providers.openai_compatible.structured_output_mode'),
+      },
+    },
+  };
+}
+
+const UI_CONFIG_KEYS = new Set([
+  'agent.planner.provider',
+  'agent.planner.model',
+  'agent.planner.effort',
+  'agent.coder.provider',
+  'agent.coder.model',
+  'agent.coder.effort',
+  'agent.reviewer.provider',
+  'agent.reviewer.model',
+  'agent.reviewer.effort',
+  'neal.review_level',
+  'providers.openai_compatible.base_url',
+  'providers.openai_compatible.api_key_env',
+  'providers.openai_compatible.default_model',
+  'providers.openai_compatible.structured_output_mode',
+]);
+
+function normalizeUiConfigValue(key: string, value: unknown) {
+  if (!UI_CONFIG_KEYS.has(key)) {
+    throw new UiHttpError(400, `Unsupported config key: ${key}`);
+  }
+  if (value !== null && typeof value !== 'string') {
+    throw new UiHttpError(400, `Config value for ${key} must be a string or null.`);
+  }
+  const trimmed = typeof value === 'string' ? value.trim() : null;
+
+  if (key.endsWith('.provider') && trimmed === null) {
+    if (key !== 'agent.planner.provider') {
+      throw new UiHttpError(400, `${key} cannot be unset.`);
+    }
+    return { operation: 'delete' as const, value: null };
+  }
+  if (key === 'neal.review_level' && !['strict', 'moderate', 'lenient'].includes(trimmed ?? '')) {
+    throw new UiHttpError(400, 'neal.review_level must be strict, moderate, or lenient.');
+  }
+  if (key === 'providers.openai_compatible.structured_output_mode' && trimmed !== null &&
+      !['json_schema', 'json_object'].includes(trimmed)) {
+    throw new UiHttpError(400, 'structured_output_mode must be json_schema, json_object, or null.');
+  }
+  if (key.endsWith('.effort') && trimmed === null) {
+    return { operation: 'delete' as const, value: null };
+  }
+  if (key.endsWith('.provider') && trimmed !== null) {
+    const registered = listRegisteredProviderDefinitions().some((definition) => definition.id === trimmed);
+    if (!registered) {
+      throw new UiHttpError(400, `Unknown provider: ${trimmed}`);
+    }
+  }
+  return { operation: 'set' as const, value: trimmed };
+}
+
+async function patchUiConfig(cwd: string, target: 'repo' | 'user', changes: Record<string, unknown>) {
+  if (Object.keys(changes).length === 0) {
+    throw new UiHttpError(400, 'No config changes supplied.');
+  }
+
+  const sources = getConfigSourceInfo(cwd);
+  const path = target === 'repo' ? sources.repo.path : sources.user.path;
+  const existed = target === 'repo' ? sources.repo.exists : sources.user.exists;
+  const original = existed ? await readFile(path, 'utf8') : '{}\n';
+  const document = YAML.parseDocument(original.trim() ? original : '{}\n');
+
+  if (document.errors.length > 0 || (document.contents !== null && !isMap(document.contents))) {
+    throw new UiHttpError(400, `Cannot edit ${path}: config is not a valid YAML mapping.`);
+  }
+  if (document.contents === null) {
+    document.contents = document.createNode({});
+  }
+  if (isMap(document.contents)) {
+    document.contents.flow = false;
+  }
+
+  for (const [key, rawValue] of Object.entries(changes)) {
+    const normalized = normalizeUiConfigValue(key, rawValue);
+    const keyPath = key.split('.');
+    if (normalized.operation === 'delete') {
+      document.deleteIn(keyPath);
+    } else {
+      document.setIn(keyPath, normalized.value);
+    }
+  }
+
+  await writeTextAtomic(path, document.toString());
+  clearConfigCache(cwd);
+  try {
+    assertWriterProvidersConfigured(cwd, { context: 'Control Center config save' });
+  } catch (error) {
+    if (existed) {
+      await writeTextAtomic(path, original);
+    } else {
+      await rm(path, { force: true });
+    }
+    clearConfigCache(cwd);
+    throw error;
+  }
+
+  return buildUiConfigSnapshot(cwd);
 }
 
 async function buildUiTerminalFooterLine(status: NealStatusSnapshot) {
@@ -572,6 +879,29 @@ async function handleApi(
   ctx: UiServerContext,
   pathname: string,
 ) {
+  if (req.method === 'GET' && pathname === '/api/config') {
+    json(res, 200, await buildUiConfigSnapshot(ctx.cwd));
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/config') {
+    requireWriteToken(req, ctx.token);
+    if (anyActionRunning(ctx)) {
+      throw new UiHttpError(409, 'Config cannot be changed while a Neal writer action is running.');
+    }
+    const body = await readJsonBody(req);
+    const target = body.target;
+    if (target !== 'repo' && target !== 'user') {
+      throw new UiHttpError(400, 'Config target must be repo or user.');
+    }
+    const changes = body.changes;
+    if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
+      throw new UiHttpError(400, 'changes must be an object.');
+    }
+    json(res, 200, await patchUiConfig(ctx.cwd, target, changes as Record<string, unknown>));
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/api/commands') {
     json(res, 200, getUiCommandCatalog());
     return;
