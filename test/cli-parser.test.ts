@@ -401,6 +401,7 @@ test('buildUsageLines teaches only the public command surface by default', () =>
   assert.match(usage, /neal usage \[--json\] \[--run <run-id>\]/);
   assert.match(usage, /neal usage \[--json\] --all/);
   assert.match(usage, /neal changes \[--json\] \[--run <run-id>\]/);
+  assert.match(usage, /neal ui \[--port <port>\] \[--no-open\]/);
   assert.match(usage, /neal version/);
   assert.match(usage, /neal --version/);
   assert.match(usage, /neal -V/);
@@ -419,6 +420,7 @@ test('buildUsageLines teaches only the public command surface by default', () =>
   const usageExample = usageLines.indexOf('  neal usage');
   const usageAllExample = usageLines.indexOf('  neal usage --all');
   const changesExample = usageLines.indexOf('  neal changes');
+  const uiExample = usageLines.indexOf('  neal ui');
   const interactiveSetupExample = usageLines.indexOf('  neal setup');
   const setupExample = usageLines.indexOf('  neal setup --provider anthropic-claude --all-roles');
   assert.notEqual(setupUsage, -1);
@@ -430,6 +432,7 @@ test('buildUsageLines teaches only the public command surface by default', () =>
   assert.notEqual(usageExample, -1);
   assert.notEqual(usageAllExample, -1);
   assert.notEqual(changesExample, -1);
+  assert.notEqual(uiExample, -1);
   assert.notEqual(interactiveSetupExample, -1);
   assert.notEqual(setupExample, -1);
   assert.ok(setupUsage < planUsage);
