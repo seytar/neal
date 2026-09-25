@@ -550,7 +550,20 @@ async function handleApi(
   }
 
   if (req.method === 'GET' && pathname === '/api/new-run/status') {
-    json(res, 200, ctx.actions.get('__new_run__') ?? null);
+    const action = ctx.actions.get('__new_run__') ?? null;
+    if (!action) {
+      json(res, 200, null);
+      return;
+    }
+
+    const discoveredRunId = action.planDoc
+      ? await findNewestRunForPlan(ctx.cwd, action.planDoc, 'plan')
+      : null;
+
+    json(res, 200, {
+      ...action,
+      resultRunId: discoveredRunId ?? action.resultRunId ?? null,
+    });
     return;
   }
 
@@ -573,7 +586,9 @@ async function handleApi(
         planDoc,
       };
     });
-    json(res, 202, { ...action, planDoc, displayPath });
+    action.planDoc = planDoc;
+    ctx.actions.set('__new_run__', action);
+    json(res, 202, { ...action, displayPath });
     return;
   }
 
@@ -609,6 +624,9 @@ async function handleApi(
       status: detail.status.publicStatus,
       nextAction: detail.status.nextAction,
       lastMeaningfulEvent: detail.status.lastMeaningfulEvent,
+      phaseElapsedMs: detail.status.health.phaseElapsedMs,
+      sampledAt: Date.now(),
+      health: detail.status.health,
       action: detail.action,
       ...(await readUiActivityTail(detail.status.artifacts.eventsPath)),
     });
