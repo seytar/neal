@@ -27,21 +27,32 @@ Treat any provider acting in the coder or planner role as capable of running
 arbitrary commands and modifying anything the current user can reach, unless you
 have added external sandboxing yourself.
 
-### Shadow mode: no-shell execution profile
+### Shadow mode: bounded-command execution profile
 
-`neal shadow execute` is an execute-mode profile for checkouts where runtime
-verification must happen elsewhere. It does not choose a particular provider.
-Instead, the provider registry requires the configured coder adapter to declare
-and mechanically implement shell-disable support. Neal passes
-`toolPolicy.allowRun: false` to every Shadow coder surface, including primary
-scope work, reviewer-response fixes, and blocked-recovery turns. An adapter that
-cannot make that guarantee is rejected before writer work starts or resumes.
+`neal shadow execute` is an execute-mode profile for checkouts where private or
+live runtime verification must happen elsewhere. It does not choose a particular
+provider. Instead, the provider registry requires the configured coder adapter
+to declare and mechanically implement shell-disable support. An adapter that
+cannot enforce the Shadow command boundary is rejected before writer work
+starts or resumes.
 
-For the built-in adapters today, Anthropic Claude removes `Bash` from the
-coder tool list and `openai-compatible` omits its `run` tool. The current
-OpenAI Codex coder is not Shadow-eligible because its strongest writable
-sandbox still permits command execution. These are current adapter properties,
-not hard-coded provider-name policy.
+New Shadow runs default to the `verify` policy. Neal reads only inline-code
+commands explicitly declared in the active scope's `Verification:` field,
+filters out shell control syntax, wrappers, migrations, service/app startup,
+deploys, network probes, and other live/runtime operations, and supplies the
+remaining commands as an exact allowlist. The coder cannot substitute another
+command or append shell syntax. If no safe declared command remains, command
+execution is disabled for that turn. `neal shadow execute --strict` supplies
+`toolPolicy.allowRun: false` and preserves the historical no-command behavior.
+Legacy Shadow runs without a persisted policy hydrate as `strict`.
+
+For the built-in adapters today, Anthropic Claude removes `Bash` in strict mode
+and applies a PreToolUse exact-command guard in verify mode.
+`openai-compatible` disables `run` in strict mode and enforces the same exact
+allowlist in verify mode. The current OpenAI Codex coder is not Shadow-eligible
+because its strongest writable sandbox does not provide the required mechanical
+per-command boundary. These are current adapter properties, not hard-coded
+provider-name policy.
 
 Shadow mode is **not** an anonymizer, de-anonymizer, network sandbox, or general
 filesystem read jail. The operator is responsible for supplying an already
@@ -53,7 +64,7 @@ repository-only reads.
 A Shadow run cannot transition from static final-review acceptance directly to
 `done`. It stops at `awaiting_private_validation`. Private failures can be
 fed back as sanitized text with `neal shadow feedback`, which reopens the same
-run while preserving the no-shell policy. Only the operator's explicit
+run while preserving its persisted Shadow policy. Only the operator's explicit
 `neal shadow accept` assertion records private validation and permits
 `status: done`. Neal does not inspect the private repository and does not
 independently verify that assertion.
