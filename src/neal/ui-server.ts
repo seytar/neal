@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { open, readFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import { buildRunChangesSnapshot } from './changes.js';
 import { buildUsageLines } from './cli.js';
+import { runNewRunCommand } from './commands/new-run.js';
 import { runResumeRunCommand } from './commands/resume-run.js';
 import { runShadowCommand } from './commands/shadow.js';
 import { resolveRunStatePath } from './run-registry.js';
@@ -40,6 +41,8 @@ export type NealUiActionState = {
   startedAt: string;
   completedAt: string | null;
   error: string | null;
+  resultRunId?: string | null;
+  planDoc?: string | null;
 };
 
 export type NealUiServerHandle = {
@@ -222,7 +225,7 @@ function startAction(
   runId: string,
   label: string,
   command: string,
-  action: () => Promise<void>,
+  action: () => Promise<{ resultRunId?: string | null; planDoc?: string | null } | void>,
 ) {
   if (anyActionRunning(ctx)) {
     throw new UiHttpError(409, 'Another Neal UI writer action is already running.');
@@ -243,11 +246,12 @@ function startAction(
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
     try {
-      await action();
+      const result = await action();
       ctx.actions.set(runId, {
         ...state,
         status: 'succeeded',
         completedAt: new Date().toISOString(),
+        ...(result ?? {}),
       });
     } catch (error) {
       ctx.actions.set(runId, {
@@ -361,6 +365,42 @@ async function readUiActivityTail(path: string, maxEvents = 60) {
   } finally {
     await handle.close();
   }
+}
+
+function slugifyUiPlanTitle(value: string) {
+  const normalized = value
+    .normalize('NFKD')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+    .slice(0, 52);
+  return normalized || 'task';
+}
+
+function buildUiPlanPath(cwd: string, title: string) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return join(cwd, '.neal', 'ui-plans', `${stamp}-${slugifyUiPlanTitle(title)}.md`);
+}
+
+function renderUiSeedPlan(title: string, description: string) {
+  return [
+    `# ${title}`,
+    '',
+    '## Objective',
+    '',
+    description.trim(),
+    '',
+    '> Created from Neal Control Center. The planner should refine this seed into the canonical executable Neal plan format.',
+    '',
+  ].join('\n');
+}
+
+async function findNewestRunForPlan(cwd: string, planDoc: string, topLevelMode: 'plan' | 'execute') {
+  const snapshot = await buildStatusListSnapshot({ cwd });
+  const normalized = resolve(planDoc);
+  return snapshot.runs.find(
+    (run) => resolve(run.planDoc) === normalized && run.topLevelMode === topLevelMode,
+  )?.runId ?? null;
 }
 
 async function runShadowFeedback(runId: string, feedback: string) {
@@ -506,6 +546,33 @@ async function handleApi(
     return;
   }
 
+  if (req.method === 'GET' && pathname === '/api/new-run/status') {
+    json(res, 200, ctx.actions.get('__new_run__') ?? null);
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/new-run/plan') {
+    requireWriteToken(req, ctx.token);
+    const body = await readJsonBody(req);
+    const description = requireString(body, 'description');
+    const title = optionalString(body, 'title') ?? description.split(/\r?\n/)[0]?.trim().slice(0, 80) ?? 'New task';
+    const planDoc = buildUiPlanPath(ctx.cwd, title);
+    await mkdir(dirname(planDoc), { recursive: true });
+    await writeFile(planDoc, renderUiSeedPlan(title, description), { encoding: 'utf8', flag: 'wx' });
+
+    const displayPath = relative(ctx.cwd, planDoc) || planDoc;
+    const command = `neal plan ${shellQuoteForDisplay(displayPath)}`;
+    const action = startAction(ctx, '__new_run__', 'Plan new task', command, async () => {
+      await runNewRunCommand(['plan', displayPath]);
+      return {
+        resultRunId: await findNewestRunForPlan(ctx.cwd, planDoc, 'plan'),
+        planDoc,
+      };
+    });
+    json(res, 202, { ...action, planDoc, displayPath });
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/api/runs') {
     const snapshot = await buildStatusListSnapshot({ cwd: ctx.cwd });
     json(res, 200, {
@@ -570,6 +637,36 @@ async function handleApi(
     const body = await readJsonBody(req);
 
     switch (actionName) {
+      case 'execute-shadow': {
+        const detail = await buildRunDetail(ctx, runId);
+        const planDoc = detail.status.planDoc;
+        const displayPath = relative(ctx.cwd, planDoc) || planDoc;
+        const command = `neal shadow execute ${shellQuoteForDisplay(displayPath)}`;
+        const state = startAction(ctx, runId, 'Execute Shadow plan', command, async () => {
+          await runShadowCommand(['shadow', 'execute', displayPath]);
+          return {
+            resultRunId: await findNewestRunForPlan(ctx.cwd, planDoc, 'execute'),
+            planDoc,
+          };
+        });
+        json(res, 202, state);
+        return;
+      }
+      case 'execute-normal': {
+        const detail = await buildRunDetail(ctx, runId);
+        const planDoc = detail.status.planDoc;
+        const displayPath = relative(ctx.cwd, planDoc) || planDoc;
+        const command = `neal execute ${shellQuoteForDisplay(displayPath)}`;
+        const state = startAction(ctx, runId, 'Execute plan', command, async () => {
+          await runNewRunCommand(['execute', displayPath]);
+          return {
+            resultRunId: await findNewestRunForPlan(ctx.cwd, planDoc, 'execute'),
+            planDoc,
+          };
+        });
+        json(res, 202, state);
+        return;
+      }
       case 'resume': {
         const command = `neal resume --run ${runId}`;
         const state = startAction(ctx, runId, 'Resume', command, () =>
