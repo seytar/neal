@@ -256,6 +256,36 @@ Shadow mode is provider-capability-driven, not provider-name-driven. Any coder
 adapter that can enforce the required no-shell policy may participate; see
 [docs/providers.md](docs/providers.md) and [SECURITY.md](SECURITY.md).
 
+
+### Local Control Center
+
+`neal ui` starts a localhost-only visual controller for Neal's existing state
+machine:
+
+```bash
+neal ui
+neal ui --port 7331
+neal ui --no-open
+```
+
+The Control Center does not maintain a second run database. It reads the same
+run state exposed by `neal status`, `neal changes`, and `neal usage`, then
+presents operator-facing actions as buttons and forms.
+
+The first version focuses on daily writer-run control:
+
+- current and historical run list
+- running, needs-input, private-validation, failed, and done states
+- planner/coder/reviewer configuration
+- operator guidance and predefined resume choices
+- manual-gate instructions and re-check/resume
+- Shadow private-validation pass/fail controls
+- plan, progress, review, recovery, narrative, changes, and usage views
+
+The server binds only to the loopback interface. State-changing requests require
+an in-memory per-process write token injected into the locally served page.
+There is no arbitrary shell-command endpoint.
+
 Refine and execute one or more plans serially:
 
 ```bash
