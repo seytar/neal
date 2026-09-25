@@ -435,7 +435,7 @@ export type OrchestrationState = {
   // Shadow sub-policy is persisted so resume keeps the same command boundary.
   // Normal runs always store null. Legacy Shadow states that predate this field
   // hydrate to strict, preserving their historical no-shell behavior.
-  shadowExecutionPolicy: ShadowExecutionPolicy | null;
+  shadowExecutionPolicy?: ShadowExecutionPolicy | null;
   allowedDirtyPaths: string[];
   agentConfig: AgentConfig;
   // How many times the read-only consultant has run for the current scope.
