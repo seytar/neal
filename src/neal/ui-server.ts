@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { readFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { open, readFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -7,6 +7,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { buildRunChangesSnapshot } from './changes.js';
+import { buildUsageLines } from './cli.js';
 import { runResumeRunCommand } from './commands/resume-run.js';
 import { runShadowCommand } from './commands/shadow.js';
 import { resolveRunStatePath } from './run-registry.js';
@@ -17,6 +18,7 @@ import {
   type NealStatusSnapshot,
 } from './status.js';
 import { buildRunUsageSnapshot } from './usage.js';
+import { getAppVersion } from './version.js';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 7331;
@@ -33,6 +35,7 @@ export type NealUiLane =
 export type NealUiActionState = {
   runId: string;
   label: string;
+  command: string;
   status: 'running' | 'succeeded' | 'failed';
   startedAt: string;
   completedAt: string | null;
@@ -218,6 +221,7 @@ function startAction(
   ctx: UiServerContext,
   runId: string,
   label: string,
+  command: string,
   action: () => Promise<void>,
 ) {
   if (anyActionRunning(ctx)) {
@@ -227,6 +231,7 @@ function startAction(
   const state: NealUiActionState = {
     runId,
     label,
+    command,
     status: 'running',
     startedAt: new Date().toISOString(),
     completedAt: null,
@@ -257,6 +262,105 @@ function startAction(
   })();
 
   return state;
+}
+
+function shellQuoteForDisplay(value: string) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+function getUiCommandCatalog() {
+  const lines = buildUsageLines(getAppVersion());
+  const commands = lines.flatMap((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('Usage: ')) {
+      return [trimmed.slice('Usage: '.length)];
+    }
+    if (trimmed.startsWith('or: ')) {
+      return [trimmed.slice('or: '.length)];
+    }
+    return [];
+  });
+
+  return {
+    version: getAppVersion(),
+    commands,
+    helpText: lines.join('\n'),
+  };
+}
+
+type UiActivityEvent = {
+  ts: string | null;
+  type: string;
+  summary: string;
+};
+
+function summarizeUiEvent(value: unknown): UiActivityEvent | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const event = value as { ts?: unknown; type?: unknown; data?: unknown };
+  if (typeof event.type !== 'string' || event.type.trim() === '') {
+    return null;
+  }
+  const data = event.data && typeof event.data === 'object' && !Array.isArray(event.data)
+    ? event.data as Record<string, unknown>
+    : {};
+  const candidates = [
+    data.message,
+    data.summary,
+    data.label,
+    data.phase,
+    data.provider,
+    data.command,
+    data.path,
+    data.status,
+  ];
+  const detail = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim() !== '');
+  return {
+    ts: typeof event.ts === 'string' ? event.ts : null,
+    type: event.type,
+    summary: typeof detail === 'string' ? detail.trim().slice(0, 240) : event.type,
+  };
+}
+
+async function readUiActivityTail(path: string, maxEvents = 60) {
+  const info = await stat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  });
+  if (!info || !info.isFile()) {
+    return { path, events: [] as UiActivityEvent[] };
+  }
+
+  const bytesToRead = Math.min(info.size, 256 * 1024);
+  const start = Math.max(0, info.size - bytesToRead);
+  const handle = await open(path, 'r');
+  try {
+    const buffer = Buffer.alloc(bytesToRead);
+    await handle.read(buffer, 0, bytesToRead, start);
+    let content = buffer.toString('utf8');
+    if (start > 0) {
+      const firstNewline = content.indexOf('\n');
+      content = firstNewline >= 0 ? content.slice(firstNewline + 1) : '';
+    }
+    const events = content
+      .split('\n')
+      .filter(Boolean)
+      .flatMap((line) => {
+        try {
+          const summarized = summarizeUiEvent(JSON.parse(line));
+          return summarized ? [summarized] : [];
+        } catch {
+          return [];
+        }
+      })
+      .slice(-maxEvents);
+    return { path, events };
+  } finally {
+    await handle.close();
+  }
 }
 
 async function runShadowFeedback(runId: string, feedback: string) {
@@ -397,6 +501,11 @@ async function handleApi(
   ctx: UiServerContext,
   pathname: string,
 ) {
+  if (req.method === 'GET' && pathname === '/api/commands') {
+    json(res, 200, getUiCommandCatalog());
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/api/runs') {
     const snapshot = await buildStatusListSnapshot({ cwd: ctx.cwd });
     json(res, 200, {
@@ -418,6 +527,20 @@ async function handleApi(
 
   if (req.method === 'GET' && parts.length === 3) {
     json(res, 200, await buildRunDetail(ctx, runId));
+    return;
+  }
+
+  if (req.method === 'GET' && parts[3] === 'activity' && parts.length === 4) {
+    const detail = await buildRunDetail(ctx, runId);
+    json(res, 200, {
+      runId,
+      phase: detail.status.publicPhase,
+      status: detail.status.publicStatus,
+      nextAction: detail.status.nextAction,
+      lastMeaningfulEvent: detail.status.lastMeaningfulEvent,
+      action: detail.action,
+      ...(await readUiActivityTail(detail.status.artifacts.eventsPath)),
+    });
     return;
   }
 
@@ -448,7 +571,8 @@ async function handleApi(
 
     switch (actionName) {
       case 'resume': {
-        const state = startAction(ctx, runId, 'Resume', () =>
+        const command = `neal resume --run ${runId}`;
+        const state = startAction(ctx, runId, 'Resume', command, () =>
           runResumeRunCommand(['resume', '--run', runId]),
         );
         json(res, 202, state);
@@ -456,7 +580,8 @@ async function handleApi(
       }
       case 'guidance': {
         const message = requireString(body, 'message');
-        const state = startAction(ctx, runId, 'Apply operator guidance', () =>
+        const command = `neal resume --run ${runId} --message ${shellQuoteForDisplay(message)}`;
+        const state = startAction(ctx, runId, 'Apply operator guidance', command, () =>
           runResumeRunCommand(['resume', '--run', runId, '--message', message]),
         );
         json(res, 202, state);
@@ -468,7 +593,8 @@ async function handleApi(
         if (note) {
           args.push('--note', note);
         }
-        const state = startAction(ctx, runId, 'Accept private validation', () =>
+        const command = `neal shadow accept --run ${runId}${note ? ` --note ${shellQuoteForDisplay(note)}` : ''}`;
+        const state = startAction(ctx, runId, 'Accept private validation', command, () =>
           runShadowCommand(args),
         );
         json(res, 202, state);
@@ -476,7 +602,8 @@ async function handleApi(
       }
       case 'shadow-feedback': {
         const feedback = requireString(body, 'feedback');
-        const state = startAction(ctx, runId, 'Apply private validation feedback', () =>
+        const command = `neal shadow feedback --run ${runId} --file <temporary-sanitized-feedback-file>`;
+        const state = startAction(ctx, runId, 'Apply private validation feedback', command, () =>
           runShadowFeedback(runId, feedback),
         );
         json(res, 202, state);
