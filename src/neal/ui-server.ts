@@ -204,10 +204,16 @@ async function buildRunDetail(ctx: UiServerContext, runId: string) {
     statePath: resolution.statePath,
   });
 
+  const displayPlanPath = relative(ctx.cwd, status.planDoc) || status.planDoc;
+
   return {
     status,
     uiLane: classifyUiRun(status),
     action: ctx.actions.get(runId) ?? null,
+    executionCommands: {
+      shadow: `neal shadow execute ${shellQuoteForDisplay(displayPlanPath)}`,
+      normal: `neal execute ${shellQuoteForDisplay(displayPlanPath)}`,
+    },
     guidanceOptions: (status.blockedGuidance?.options ?? []).map((option) => ({
       label: option.label,
       description: option.description,
