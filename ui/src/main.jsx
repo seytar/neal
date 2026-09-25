@@ -211,11 +211,126 @@ function LiveActivity({ activity, loading }) {
   );
 }
 
+function NewRunModal({
+  open,
+  onClose,
+  title,
+  setTitle,
+  description,
+  setDescription,
+  mode,
+  setMode,
+  action,
+  onStart,
+}) {
+  if (!open) {
+    return null;
+  }
+
+  const busy = action?.status === 'running';
+  const previewPath = '.neal/ui-plans/<generated-task-plan>.md';
+  const previewCommand = 'neal plan ' + previewPath;
+
+  return (
+    <div className="commands-backdrop" onClick={busy ? undefined : onClose}>
+      <section className="new-run-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="commands-head">
+          <div>
+            <strong>New Run</strong>
+            <span>plan first, then execute</span>
+          </div>
+          <button type="button" className="panel-close" onClick={onClose} disabled={busy}>×</button>
+        </div>
+
+        <label className="field-label" htmlFor="new-run-title">Title</label>
+        <input
+          id="new-run-title"
+          className="text-input"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Add body camera locations to map"
+          disabled={busy}
+        />
+
+        <label className="field-label" htmlFor="new-run-description">Task</label>
+        <textarea
+          id="new-run-description"
+          className="new-run-task"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="Describe what you want Neal to implement, constraints, expected behavior and anything it should preserve..."
+          disabled={busy}
+        />
+
+        <div className="new-run-mode">
+          <span>Execution after planning</span>
+          <div className="mode-buttons">
+            <button
+              type="button"
+              className={mode === 'shadow' ? 'active' : ''}
+              onClick={() => setMode('shadow')}
+              disabled={busy}
+            >
+              Shadow
+            </button>
+            <button
+              type="button"
+              className={mode === 'normal' ? 'active' : ''}
+              onClick={() => setMode('normal')}
+              disabled={busy}
+            >
+              Normal
+            </button>
+          </div>
+        </div>
+
+        <div className="new-run-note">
+          Neal will create the seed Markdown under <code>.neal/ui-plans/</code>, then refine it in place.
+        </div>
+
+        {action?.command ? (
+          <CommandLine
+            command={action.command}
+            label={action.status === 'running' ? 'Running' : 'Last command'}
+          />
+        ) : (
+          <CommandLine command={previewCommand} label="Will run" />
+        )}
+
+        {busy ? (
+          <div className="new-run-progress">
+            <span className="pulse" />
+            <div>
+              <strong>Planning...</strong>
+              <span>Claude planner and reviewer loop are running. The new run will appear automatically.</span>
+            </div>
+          </div>
+        ) : null}
+
+        {action?.status === 'failed' ? (
+          <div className="error-box">{action.error}</div>
+        ) : null}
+
+        <div className="actions new-run-actions">
+          <ActionButton
+            kind="primary"
+            disabled={!description.trim() || busy}
+            onClick={onStart}
+          >
+            {busy ? 'Planning…' : 'Start planning'}
+          </ActionButton>
+          {!busy ? <ActionButton onClick={onClose}>Cancel</ActionButton> : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function StatusPill({ lane }) {
   return <span className={'pill ' + lane}>{laneLabel(lane)}</span>;
 }
 
-function RunList({ runs, selectedRunId, onSelect, onCommands }) {
+function RunList({ runs, selectedRunId, onSelect, onCommands, onNewRun }) {
   return (
     <aside className="sidebar">
       <div className="brand-row">
@@ -223,6 +338,7 @@ function RunList({ runs, selectedRunId, onSelect, onCommands }) {
         <span className="brand-tag">control</span>
         <button type="button" className="sidebar-command-button" onClick={onCommands}>commands</button>
       </div>
+      <button type="button" className="new-run-button" onClick={onNewRun}>+ New Run</button>
 
       <div className="run-list">
         {runs.length === 0 ? (
@@ -463,6 +579,30 @@ function ActionPanel({
         <ActionButton kind="primary" onClick={() => onAction('resume')}>
           Resume
         </ActionButton>
+      </section>
+    );
+  }
+
+  if (status.status === 'done' && status.topLevelMode === 'plan') {
+    return (
+      <section className="card success-card">
+        <div className="eyebrow">Plan ready</div>
+        <h2>Planning complete</h2>
+        <p className="body-copy">
+          The refined plan is ready for execution. Shadow is the safer default for the sanitized checkout workflow.
+        </p>
+        <CommandLine
+          command={'neal shadow execute ' + JSON.stringify(status.planDoc)}
+          label="Shadow will run"
+        />
+        <div className="actions">
+          <ActionButton kind="primary" onClick={() => onAction('execute-shadow')}>
+            Execute Shadow
+          </ActionButton>
+          <ActionButton onClick={() => onAction('execute-normal')}>
+            Execute Normal
+          </ActionButton>
+        </div>
       </section>
     );
   }
@@ -830,6 +970,11 @@ function App() {
   const [commandsOpen, setCommandsOpen] = useState(false);
   const [activity, setActivity] = useState(null);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [newRunOpen, setNewRunOpen] = useState(false);
+  const [newRunTitle, setNewRunTitle] = useState('');
+  const [newRunDescription, setNewRunDescription] = useState('');
+  const [newRunMode, setNewRunMode] = useState('shadow');
+  const [newRunAction, setNewRunAction] = useState(null);
 
   const selectedExists = useMemo(
     () => runs.some((run) => run.runId === selectedRunId),
@@ -893,6 +1038,39 @@ function App() {
       .then(setCommandCatalog)
       .catch((nextError) => setError(nextError.message));
   }, []);
+
+  useEffect(() => {
+    if (!newRunOpen && newRunAction?.status !== 'running') {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const refreshNewRun = async () => {
+      try {
+        const data = await api('/api/new-run/status');
+        if (cancelled || !data) {
+          return;
+        }
+        setNewRunAction(data);
+        if (data.status === 'succeeded' && data.resultRunId) {
+          setSelectedRunId(data.resultRunId);
+          setNewRunOpen(false);
+          await refreshRuns();
+        }
+      } catch (nextError) {
+        if (!cancelled) {
+          setError(nextError.message);
+        }
+      }
+    };
+
+    void refreshNewRun();
+    const timer = setInterval(() => void refreshNewRun(), POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [newRunOpen, newRunAction?.status, refreshRuns]);
 
   useEffect(() => {
     void refreshRuns();
@@ -991,6 +1169,26 @@ function App() {
     }
   }, [selectedRunId, refreshDetail, refreshRuns]);
 
+  const startNewRun = useCallback(async () => {
+    if (!newRunDescription.trim()) {
+      return;
+    }
+    try {
+      const data = await api('/api/new-run/plan', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: newRunTitle.trim() || null,
+          description: newRunDescription.trim(),
+          preferredExecutionMode: newRunMode,
+        }),
+      });
+      setNewRunAction(data);
+      await refreshRuns();
+    } catch (nextError) {
+      setError(nextError.message);
+    }
+  }, [newRunDescription, newRunTitle, newRunMode, refreshRuns]);
+
   const selectTab = useCallback((tab) => {
     setSelectedTab(tab);
     setArtifactViewMode('preview');
@@ -1004,11 +1202,25 @@ function App() {
           selectedRunId={selectedRunId}
           onSelect={setSelectedRunId}
           onCommands={() => setCommandsOpen(true)}
+          onNewRun={() => setNewRunOpen(true)}
         />
         <CommandsPanel
         catalog={commandCatalog}
         open={commandsOpen}
         onClose={() => setCommandsOpen(false)}
+      />
+
+      <NewRunModal
+        open={newRunOpen}
+        onClose={() => setNewRunOpen(false)}
+        title={newRunTitle}
+        setTitle={setNewRunTitle}
+        description={newRunDescription}
+        setDescription={setNewRunDescription}
+        mode={newRunMode}
+        setMode={setNewRunMode}
+        action={newRunAction}
+        onStart={startNewRun}
       />
 
       <main className="main"><div className="empty">No Neal runs found in this project.</div></main>
@@ -1023,6 +1235,7 @@ function App() {
         selectedRunId={selectedRunId}
         onSelect={setSelectedRunId}
         onCommands={() => setCommandsOpen(true)}
+        onNewRun={() => setNewRunOpen(true)}
       />
 
       <CommandsPanel
