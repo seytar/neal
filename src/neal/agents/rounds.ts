@@ -639,6 +639,8 @@ export async function runCoderScopeRound(args: {
       prompt: applyExecutionProfilePrompt(
         buildScopePrompt(args.planDoc, progressText),
         args.executionProfile ?? 'normal',
+        args.shadowExecutionPolicy ?? 'strict',
+        args.allowedVerificationCommands ?? [],
       ),
       schema,
       label: 'Coder scope round',
@@ -648,10 +650,10 @@ export async function runCoderScopeRound(args: {
         validator: validateCoderScopePayload,
       }),
       toolPolicy: getExecutionCoderToolPolicy(
-      args.executionProfile ?? 'normal',
-      args.shadowExecutionPolicy ?? 'strict',
-      args.allowedVerificationCommands ?? [],
-    ),
+        args.executionProfile ?? 'normal',
+        args.shadowExecutionPolicy ?? 'strict',
+        args.allowedVerificationCommands ?? [],
+      ),
       resumeHandle: args.sessionHandle,
       onSessionStarted: args.onSessionStarted,
       logger: args.logger,
@@ -694,13 +696,15 @@ export async function runCoderScopeRound(args: {
           prompt: applyExecutionProfilePrompt(
             buildLegacyScopePrompt(args.planDoc, progressText),
             args.executionProfile ?? 'normal',
+            args.shadowExecutionPolicy ?? 'strict',
+            args.allowedVerificationCommands ?? [],
           ),
           ...getCoderRuntimeOptions(args.cwd),
           toolPolicy: getExecutionCoderToolPolicy(
-      args.executionProfile ?? 'normal',
-      args.shadowExecutionPolicy ?? 'strict',
-      args.allowedVerificationCommands ?? [],
-    ),
+        args.executionProfile ?? 'normal',
+        args.shadowExecutionPolicy ?? 'strict',
+        args.allowedVerificationCommands ?? [],
+      ),
           resumeHandle: args.sessionHandle,
           // Guarded so an abandoned attempt's late session handle can never
           // overwrite a newer attempt's handle.
