@@ -12,6 +12,9 @@ import { runNewRunCommand } from './commands/new-run.js';
 import { runResumeRunCommand } from './commands/resume-run.js';
 import { runShadowCommand } from './commands/shadow.js';
 import { resolveRunStatePath } from './run-registry.js';
+import { getExecutionPlanPath, getExecutionPlanScopeCount } from './scopes.js';
+import { loadState } from './state.js';
+import { renderStatusFooterLine } from './status-footer.js';
 import {
   buildStatusListSnapshot,
   buildStatusSnapshot,
@@ -197,6 +200,22 @@ function extractGuidanceMessage(command: string) {
   return match[1].replace(/\\([\\$"`])/g, '$1');
 }
 
+async function buildUiTerminalFooterLine(status: NealStatusSnapshot) {
+  const state = await loadState(status.statePath);
+  const totalScopeCount = await getExecutionPlanScopeCount(getExecutionPlanPath(state));
+  const now = Date.now();
+  const phaseStartedAt = status.health.phaseElapsedMs === null
+    ? now
+    : now - status.health.phaseElapsedMs;
+
+  return renderStatusFooterLine({
+    state,
+    phaseStartedAt,
+    totalScopeCount,
+    now,
+  });
+}
+
 async function buildRunDetail(ctx: UiServerContext, runId: string) {
   const resolution = await resolveRunStatePath({ cwd: ctx.cwd, runId });
   const status = await buildStatusSnapshot({
@@ -216,6 +235,7 @@ async function buildRunDetail(ctx: UiServerContext, runId: string) {
 
   return {
     status,
+    terminalFooterLine: await buildUiTerminalFooterLine(status),
     uiLane: classifyUiRun(status),
     action: directAction ?? inheritedAction,
     executionCommands: {
@@ -630,6 +650,7 @@ async function handleApi(
       runId,
       phase: detail.status.publicPhase,
       status: detail.status.publicStatus,
+      terminalFooterLine: detail.terminalFooterLine,
       nextAction: detail.status.nextAction,
       lastMeaningfulEvent: detail.status.lastMeaningfulEvent,
       phaseElapsedMs: detail.status.health.phaseElapsedMs,
