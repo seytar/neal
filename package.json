@@ -49,7 +49,7 @@
     "verify:package": "pnpm build && node scripts/verify-package.mjs",
     "validate:release": "node scripts/validate-release.mjs",
     "dev:link": "pnpm build && npm link",
-    "lint": "eslint src test",
+    "lint": "eslint src test ui/src ui/vite.config.js",
     "start": "tsx src/neal/index.ts",
     "test": "NEAL_NOTIFY_BIN= node --import tsx --test test/*.test.ts",
     "typecheck": "node node_modules/typescript-7/bin/tsc --noEmit -p tsconfig.json && node node_modules/typescript-7/bin/tsc -p tsconfig.test.json",
