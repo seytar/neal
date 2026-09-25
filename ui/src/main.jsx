@@ -768,13 +768,16 @@ function StatusPill({ lane }) {
   return <span className={'pill ' + lane}>{laneLabel(lane)}</span>;
 }
 
-function RunList({ runs, selectedRunId, onSelect, onCommands, onNewRun }) {
+function RunList({ runs, selectedRunId, onSelect, onCommands, onConfig, onNewRun }) {
   return (
     <aside className="sidebar">
       <div className="brand-row">
         <div className="brand">neal</div>
         <span className="brand-tag">control</span>
-        <button type="button" className="sidebar-command-button" onClick={onCommands}>commands</button>
+        <div className="sidebar-mini-actions">
+          <button type="button" className="sidebar-command-button" onClick={onConfig}>config</button>
+          <button type="button" className="sidebar-command-button" onClick={onCommands}>commands</button>
+        </div>
       </div>
       <button type="button" className="new-run-button" onClick={onNewRun}>+ New Run</button>
 
@@ -1415,6 +1418,9 @@ function App() {
   const [error, setError] = useState(null);
   const [commandCatalog, setCommandCatalog] = useState(null);
   const [commandsOpen, setCommandsOpen] = useState(false);
+  const [configOpen, setConfigOpen] = useState(false);
+  const [configData, setConfigData] = useState(null);
+  const [configLoading, setConfigLoading] = useState(false);
   const [activity, setActivity] = useState(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const [newRunOpen, setNewRunOpen] = useState(false);
@@ -1428,6 +1434,26 @@ function App() {
     () => runs.some((run) => run.runId === selectedRunId),
     [runs, selectedRunId],
   );
+
+  const refreshConfig = useCallback(async () => {
+    setConfigLoading(true);
+    try {
+      const data = await api('/api/config');
+      setConfigData(data);
+      setError(null);
+      return data;
+    } catch (nextError) {
+      setError(nextError.message);
+      return null;
+    } finally {
+      setConfigLoading(false);
+    }
+  }, []);
+
+  const openConfig = useCallback(() => {
+    setConfigOpen(true);
+    void refreshConfig();
+  }, [refreshConfig]);
 
   const refreshRuns = useCallback(async () => {
     try {
@@ -1678,13 +1704,22 @@ function App() {
           selectedRunId={selectedRunId}
           onSelect={setSelectedRunId}
           onCommands={() => setCommandsOpen(true)}
+          onConfig={openConfig}
           onNewRun={openNewRun}
         />
         <CommandsPanel
-        catalog={commandCatalog}
-        open={commandsOpen}
-        onClose={() => setCommandsOpen(false)}
-      />
+          catalog={commandCatalog}
+          open={commandsOpen}
+          onClose={() => setCommandsOpen(false)}
+        />
+
+        <ConfigPanel
+          open={configOpen}
+          onClose={() => setConfigOpen(false)}
+          config={configData}
+          loading={configLoading}
+          onReload={refreshConfig}
+        />
 
       <NewRunModal
         open={newRunOpen}
@@ -1712,6 +1747,7 @@ function App() {
         selectedRunId={selectedRunId}
         onSelect={setSelectedRunId}
         onCommands={() => setCommandsOpen(true)}
+        onConfig={openConfig}
         onNewRun={openNewRun}
       />
 
@@ -1719,6 +1755,14 @@ function App() {
         catalog={commandCatalog}
         open={commandsOpen}
         onClose={() => setCommandsOpen(false)}
+      />
+
+      <ConfigPanel
+        open={configOpen}
+        onClose={() => setConfigOpen(false)}
+        config={configData}
+        loading={configLoading}
+        onReload={refreshConfig}
       />
 
       <NewRunModal
@@ -1748,6 +1792,9 @@ function App() {
                 <span className="run-id">{detail.status.runId}</span>
               </div>
               <div className="top-actions">
+                <button type="button" className="button compact" onClick={openConfig}>
+                  Config
+                </button>
                 <button type="button" className="button compact" onClick={() => setCommandsOpen(true)}>
                   Commands
                 </button>
