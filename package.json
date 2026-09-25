@@ -61,9 +61,7 @@
     "ai": "7.0.106",
     "dotenv": "^17.4.2",
     "yaml": "^2.9.1",
-    "zod": "4.6.5",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -73,6 +71,8 @@
     "typescript": "^6.0.3",
     "typescript-7": "npm:typescript@^7.0.2",
     "typescript-eslint": "^8.70.0",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }
