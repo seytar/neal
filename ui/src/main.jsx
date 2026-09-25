@@ -178,8 +178,11 @@ function ConfigSourceBadge({ source }) {
   if (!source) return null;
   const detail = source.note || (source.path ? source.path + ' · ' + source.key : source.key);
   return (
-    <span className={'config-source ' + source.kind} title={detail}>
-      {configSourceLabel(source)}
+    <span className="config-source-wrap">
+      <span className={'config-source ' + source.kind} title={detail}>
+        {configSourceLabel(source)}
+      </span>
+      <InfoTip text={detail} />
     </span>
   );
 }
@@ -433,7 +436,7 @@ function ConfigPanel({ open, onClose, config, loading, onReload }) {
               <div className="config-readiness-line">
                 <span>Credential env</span>
                 <code>{config.openaiCompatible.apiKeyEnv}</code>
-                <ConfigSourceBadge source={config.openaiCompatible.sources.apiKeyEnv} />
+                <ConfigSourceBadge source={config.openaiCompatible.credentialSource} />
               </div>
               <div className="config-secret-note">
                 Secret values are never returned to the browser or written by this panel. Set <code>{config.openaiCompatible.apiKeyEnv}</code> in the Neal process environment or project <code>.env</code>.
