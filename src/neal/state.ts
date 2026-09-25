@@ -25,6 +25,7 @@ import type {
   ReviewerMeaningfulProgressVerdict,
   ReviewFinding,
   ReviewRound,
+  ShadowExecutionPolicy,
   TopLevelMode,
 } from './types.js';
 import {
@@ -50,6 +51,7 @@ import {
 } from './state-invariants.js';
 
 const TOP_LEVEL_MODES = new Set<TopLevelMode>(['plan', 'execute']);
+const SHADOW_EXECUTION_POLICIES = ['verify', 'strict'] as const satisfies readonly ShadowExecutionPolicy[];
 const INTERACTIVE_BLOCKED_RECOVERY_TURN_ORIGINS = ['operator', 'consultant'] as const;
 
 const INTERACTIVE_BLOCKED_RECOVERY_SOURCE_PHASES = new Set<InteractiveBlockedRecoveryState['sourcePhase']>([
@@ -119,6 +121,7 @@ export async function createInitialState(init: OrchestratorInit, baseCommit: str
   // Capture the author-declared shape from the seed plan for all top-level modes, so plan
   // refinement can honor an author-declared `one_shot`. Write-once: never reassigned.
   const authoredExecutionShape = await readSeedExecutionShape(init);
+  const executionProfile = init.executionProfile ?? 'normal';
 
   return {
     version: 1,
@@ -127,7 +130,9 @@ export async function createInitialState(init: OrchestratorInit, baseCommit: str
     cwd: init.cwd,
     runDir: init.runDir,
     topLevelMode: init.topLevelMode,
-    executionProfile: init.executionProfile ?? 'normal',
+    executionProfile,
+    shadowExecutionPolicy:
+      executionProfile === 'shadow' ? (init.shadowExecutionPolicy ?? 'verify') : null,
     allowedDirtyPaths: [...init.allowedDirtyPaths],
     agentConfig: init.agentConfig,
     consultantAttemptCount: 0,
@@ -1145,6 +1150,10 @@ function normalizeStateV1(parsed: unknown): OrchestrationState {
     isLegacyPlannerSessionState({ phase, blockedFromPhase, topLevelMode });
   const plannerSessionHandle = migrateLegacyPlannerSession ? coderSessionHandle : persistedPlannerSessionHandle;
   const plannerSessionProtocol = migrateLegacyPlannerSession ? coderSessionProtocol : persistedPlannerSessionProtocol;
+  const executionProfile = readOptionalEnum(state, 'executionProfile', ['normal', 'shadow'] as const) ?? 'normal';
+  const shadowExecutionPolicy = executionProfile === 'shadow'
+    ? (readOptionalEnum(state, 'shadowExecutionPolicy', SHADOW_EXECUTION_POLICIES) ?? 'strict')
+    : (readOptionalEnum(state, 'shadowExecutionPolicy', SHADOW_EXECUTION_POLICIES) ?? null);
 
   return {
     version: 1,
@@ -1153,7 +1162,8 @@ function normalizeStateV1(parsed: unknown): OrchestrationState {
     cwd: readString(state, 'cwd'),
     runDir: readString(state, 'runDir'),
     topLevelMode,
-    executionProfile: readOptionalEnum(state, 'executionProfile', ['normal', 'shadow'] as const) ?? 'normal',
+    executionProfile,
+    shadowExecutionPolicy,
     allowedDirtyPaths: readStringArray(state, 'allowedDirtyPaths'),
     agentConfig: hydrateAgentConfig(readRequired(state, 'agentConfig'), 'agentConfig'),
     consultantAttemptCount: readOptionalSafeInteger(state, 'consultantAttemptCount') ?? 0,
