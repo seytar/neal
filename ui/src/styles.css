@@ -1280,3 +1280,92 @@ pre {
   justify-content: flex-end;
   margin-top: 12px;
 }
+
+
+/* Slight readability lift without changing the compact layout. */
+.brand { font-size: 16px; }
+.brand-tag,
+.run-meta-line,
+.eyebrow,
+.option-description,
+.model-compact > div,
+.next-compact p,
+.tab,
+.view-toggle button,
+.source-row code,
+.file-chips code,
+.provider-row > span,
+.activity-events,
+.command-line code,
+.catalog-command code,
+.help-details,
+.new-run-mode > span,
+.mode-buttons button,
+.new-run-note,
+.new-run-note code,
+.new-run-progress span:not(.pulse) {
+  font-size: 10px;
+}
+
+.subtitle,
+.muted,
+.notice,
+.error-box,
+.global-error,
+.field-label,
+.button,
+.option-title,
+.fact-strip strong,
+.empty-inline,
+.provider-row strong,
+.live-state strong,
+.live-item strong,
+.new-run-button,
+.new-run-progress strong {
+  font-size: 11px;
+}
+
+.run-title,
+.body-copy,
+textarea,
+.text-input,
+.empty,
+.markdown-preview {
+  font-size: 12px;
+}
+
+.pill,
+.fact-strip span,
+.next-compact > span,
+.model-compact span,
+.info-tip,
+.source-label,
+.path-copy,
+.metric > span,
+.section-title span,
+.provider-row small,
+.provider-head > span,
+.sidebar-command-button,
+.command-line > span,
+.live-state span:not(.pulse),
+.live-item > span,
+.event-row time,
+.event-row code {
+  font-size: 9px;
+}
+
+.metric > strong { font-size: 13px; }
+h1 { font-size: 18px; }
+h2 { font-size: 14px; }
+.run-id { font-size: 10px; }
+pre { font-size: 11px; }
+
+.markdown-preview h1 { font-size: 19px; }
+.markdown-preview h2 { font-size: 16px; }
+.markdown-preview h3 { font-size: 14px; }
+.markdown-preview h4 { font-size: 12px; }
+.markdown-preview code { font-size: 11px; }
+.markdown-preview table { font-size: 11px; }
+
+.commands-head strong { font-size: 14px; }
+.commands-head span { font-size: 10px; }
