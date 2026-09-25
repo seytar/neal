@@ -236,20 +236,20 @@ function NewRunModal({
   action,
   onStart,
 }) {
-  if (!open) {
-    return null;
-  }
-
   const busy = action?.status === 'running';
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    if (!busy) {
+    if (!open || !busy) {
       return undefined;
     }
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [busy]);
+  }, [open, busy]);
+
+  if (!open) {
+    return null;
+  }
 
   const actionElapsed = busy && action?.startedAt
     ? Math.max(0, now - Date.parse(action.startedAt))
