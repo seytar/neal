@@ -1159,3 +1159,124 @@ pre {
     width: 100vw;
   }
 }
+
+
+.new-run-button {
+  width: 100%;
+  margin-bottom: 7px;
+  padding: 6px 8px;
+  color: #d9e4ef;
+  font-size: 10px;
+  font-weight: 700;
+  text-align: left;
+  background: #172238;
+  border: 1px solid #405b91;
+  border-radius: 6px;
+}
+
+.new-run-button:hover {
+  background: #1d2b46;
+  border-color: #5877b8;
+}
+
+.new-run-modal {
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 32px));
+  margin: auto;
+  padding: 14px;
+  overflow: auto;
+  background: #0e151d;
+  border: 1px solid #2b3947;
+  border-radius: 10px;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, .45);
+}
+
+.new-run-task {
+  min-height: 190px;
+}
+
+.new-run-mode {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.new-run-mode > span {
+  color: #8494a6;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.mode-buttons {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: #0b1219;
+  border: 1px solid #263442;
+  border-radius: 6px;
+}
+
+.mode-buttons button {
+  padding: 4px 9px;
+  color: #8494a6;
+  font-size: 9px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+}
+
+.mode-buttons button.active {
+  color: white;
+  background: #31466d;
+}
+
+.new-run-note {
+  margin-top: 9px;
+  padding: 7px 8px;
+  color: #8c9bad;
+  font-size: 9px;
+  line-height: 1.45;
+  background: #101922;
+  border-radius: 5px;
+}
+
+.new-run-note code {
+  color: #b8c6d5;
+  font: 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.new-run-progress {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 10px;
+  padding: 8px;
+  background: #10201c;
+  border: 1px solid #244d40;
+  border-radius: 6px;
+}
+
+.new-run-progress > div {
+  display: grid;
+  gap: 2px;
+}
+
+.new-run-progress strong {
+  color: #bfe5d4;
+  font-size: 10px;
+}
+
+.new-run-progress span:not(.pulse) {
+  color: #8fa99e;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.new-run-actions {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
