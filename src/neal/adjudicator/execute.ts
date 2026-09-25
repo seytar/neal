@@ -21,6 +21,7 @@ import {
   type EmptyDerivedParentAdvanceClassification,
 } from '../scopes.js';
 import { getScopeReviewerScratchDir } from '../storage-paths.js';
+import { getShadowVerificationCommandsForState } from '../shadow-verification.js';
 import type {
   FindingStatus,
   OrchestrationState,
@@ -834,6 +835,7 @@ export async function runExecuteResponseAdjudication(args: {
   const mode = args.mode ?? 'blocking';
   const context = resolveExecuteAdjudicationContext(args.state);
   const openFindings = getExecuteResponseOpenFindings(args.state, mode);
+  const allowedVerificationCommands = await getShadowVerificationCommandsForState(args.state);
   const response = await (args.runResponseRound ?? runCoderResponseRound)({
     coder: args.state.agentConfig.coder,
     cwd: args.state.cwd,
@@ -843,6 +845,8 @@ export async function runExecuteResponseAdjudication(args: {
     openFindings,
     mode: mode === 'optional' ? 'optional' : undefined,
     executionProfile: args.state.executionProfile,
+    shadowExecutionPolicy: args.state.shadowExecutionPolicy ?? undefined,
+    allowedVerificationCommands,
     sessionHandle: args.state.coderSessionHandle,
     logger: args.logger,
   });
