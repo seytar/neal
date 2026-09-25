@@ -374,6 +374,7 @@ neal status [--json] --all
 neal usage [--json] [--run <run-id>]
 neal usage [--json] --all
 neal changes [--json] [--run <run-id>]
+neal ui [--port <port>] [--no-open]
 neal squash [plan.md]
 
 # CLI information
@@ -445,6 +446,11 @@ pointer; `--run latest` has the same current-pointer semantics as other
 commands, and `--json` emits a machine-readable snapshot. If `HEAD` is not
 descended from a recorded base, the affected range is reported as unknown
 rather than being attributed to Neal.
+
+`neal ui` starts the localhost-only Control Center for the current repository.
+It visualizes the same run state exposed by the status/changes/usage commands
+and provides allowlisted operator actions for resume, guidance, manual gates,
+and Shadow private validation.
 
 `neal squash` rewrites a completed run into one commit. It previews the change
 and requires interactive confirmation before rewriting history.
