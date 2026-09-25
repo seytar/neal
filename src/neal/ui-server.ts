@@ -205,11 +205,19 @@ async function buildRunDetail(ctx: UiServerContext, runId: string) {
   });
 
   const displayPlanPath = relative(ctx.cwd, status.planDoc) || status.planDoc;
+  const directAction = ctx.actions.get(runId) ?? null;
+  const newRunAction = ctx.actions.get('__new_run__') ?? null;
+  const inheritedAction =
+    newRunAction?.status === 'running' &&
+    newRunAction.planDoc &&
+    resolve(newRunAction.planDoc) === resolve(status.planDoc)
+      ? newRunAction
+      : null;
 
   return {
     status,
     uiLane: classifyUiRun(status),
-    action: ctx.actions.get(runId) ?? null,
+    action: directAction ?? inheritedAction,
     executionCommands: {
       shadow: `neal shadow execute ${shellQuoteForDisplay(displayPlanPath)}`,
       normal: `neal execute ${shellQuoteForDisplay(displayPlanPath)}`,
