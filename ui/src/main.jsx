@@ -7,6 +7,8 @@ import './styles.css';
 
 const WRITE_TOKEN = window.__NEAL_UI_TOKEN__ || '';
 const POLL_MS = 2500;
+const ACTIVITY_POLL_MS = 1000;
+const NEW_RUN_POLL_MS = 500;
 
 async function api(path, options = {}) {
   const headers = {
@@ -1104,7 +1106,7 @@ function App() {
     };
 
     void refreshNewRun();
-    const timer = setInterval(() => void refreshNewRun(), POLL_MS);
+    const timer = setInterval(() => void refreshNewRun(), NEW_RUN_POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
@@ -1162,7 +1164,7 @@ function App() {
     };
 
     void refreshActivity();
-    const timer = setInterval(() => void refreshActivity(), POLL_MS);
+    const timer = setInterval(() => void refreshActivity(), ACTIVITY_POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(timer);
