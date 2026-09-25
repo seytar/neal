@@ -220,6 +220,7 @@ function NewRunModal({
   setDescription,
   mode,
   setMode,
+  planId,
   action,
   onStart,
 }) {
@@ -228,8 +229,8 @@ function NewRunModal({
   }
 
   const busy = action?.status === 'running';
-  const previewPath = '.neal/ui-plans/<generated-task-plan>.md';
-  const previewCommand = 'neal plan ' + previewPath;
+  const previewPath = '.neal/ui-plans/' + planId + '.md';
+  const previewCommand = "neal plan '" + previewPath + "'";
 
   return (
     <div className="commands-backdrop" onClick={busy ? undefined : onClose}>
@@ -981,6 +982,7 @@ function App() {
   const [newRunTitle, setNewRunTitle] = useState('');
   const [newRunDescription, setNewRunDescription] = useState('');
   const [newRunMode, setNewRunMode] = useState('shadow');
+  const [newRunPlanId, setNewRunPlanId] = useState('');
   const [newRunAction, setNewRunAction] = useState(null);
 
   const selectedExists = useMemo(
@@ -1188,9 +1190,12 @@ function App() {
   }, [selectedRunId, refreshDetail, refreshRuns]);
 
   const openNewRun = useCallback(() => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const random = window.crypto.randomUUID().slice(0, 8);
     setNewRunTitle('');
     setNewRunDescription('');
     setNewRunMode('shadow');
+    setNewRunPlanId(stamp + '-' + random);
     setNewRunAction(null);
     setNewRunOpen(true);
   }, []);
@@ -1205,6 +1210,7 @@ function App() {
         body: JSON.stringify({
           title: newRunTitle.trim() || null,
           description: newRunDescription.trim(),
+          planId: newRunPlanId,
           preferredExecutionMode: newRunMode,
         }),
       });
@@ -1213,7 +1219,7 @@ function App() {
     } catch (nextError) {
       setError(nextError.message);
     }
-  }, [newRunDescription, newRunTitle, newRunMode, refreshRuns]);
+  }, [newRunDescription, newRunTitle, newRunPlanId, newRunMode, refreshRuns]);
 
   const selectTab = useCallback((tab) => {
     setSelectedTab(tab);
@@ -1245,6 +1251,7 @@ function App() {
         setDescription={setNewRunDescription}
         mode={newRunMode}
         setMode={setNewRunMode}
+        planId={newRunPlanId}
         action={newRunAction}
         onStart={startNewRun}
       />
@@ -1279,6 +1286,7 @@ function App() {
         setDescription={setNewRunDescription}
         mode={newRunMode}
         setMode={setNewRunMode}
+        planId={newRunPlanId}
         action={newRunAction}
         onStart={startNewRun}
       />
