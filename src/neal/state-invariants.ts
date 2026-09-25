@@ -787,6 +787,23 @@ export function assertValidOrchestrationState(
   if (state.executionProfile === 'shadow' && state.topLevelMode !== 'execute') {
     throwStateInvariant(context, 'executionProfile', 'shadow profile is only valid for execute-mode runs');
   }
+  if (state.executionProfile === 'shadow' && state.shadowExecutionPolicy === null) {
+    throwStateInvariant(context, 'shadowExecutionPolicy', 'shadow profile requires a persisted verify or strict policy');
+  }
+  if (
+    state.executionProfile === 'shadow' &&
+    state.shadowExecutionPolicy !== 'verify' &&
+    state.shadowExecutionPolicy !== 'strict'
+  ) {
+    throwStateInvariant(
+      context,
+      'shadowExecutionPolicy',
+      `unsupported Shadow execution policy ${formatInvalidValue(state.shadowExecutionPolicy)}`,
+    );
+  }
+  if (state.executionProfile === 'normal' && state.shadowExecutionPolicy !== null) {
+    throwStateInvariant(context, 'shadowExecutionPolicy', 'normal profile requires null Shadow execution policy');
+  }
 
   if (state.phase === 'awaiting_private_validation') {
     if (state.executionProfile !== 'shadow') {
