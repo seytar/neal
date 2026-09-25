@@ -12,12 +12,14 @@ test('Shadow verification accepts bounded checks and rejects runtime or mutating
   assert.equal(isSafeShadowVerificationCommand('php -l app/Foo.php'), true);
   assert.equal(isSafeShadowVerificationCommand('pnpm test'), true);
   assert.equal(isSafeShadowVerificationCommand('php artisan route:list --name=logs.user-activities'), true);
+  assert.equal(isSafeShadowVerificationCommand('php tests/Checks/bodycam_location_mapdata_layer_check.php'), true);
 
   assert.equal(isSafeShadowVerificationCommand('php artisan migrate'), false);
   assert.equal(isSafeShadowVerificationCommand('pnpm dev'), false);
   assert.equal(isSafeShadowVerificationCommand('curl https://example.com/health'), false);
   assert.equal(isSafeShadowVerificationCommand('pnpm test && rm -rf tmp'), false);
   assert.equal(isSafeShadowVerificationCommand('bash -c "pnpm test"'), false);
+  assert.equal(isSafeShadowVerificationCommand("node -e 'console.log(1)' test"), false);
 });
 
 test('Shadow verification extracts only safe commands from the active scope', () => {
