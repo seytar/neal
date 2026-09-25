@@ -72,7 +72,7 @@ export function classifyUiRun(
     | 'pendingOperatorGuidance'
     | 'manualGate'
     | 'resumeDecision'
-  >,
+  > & { resumeDecision?: NealStatusSnapshot['resumeDecision'] },
 ): NealUiLane {
   if (run.phase === 'awaiting_private_validation') {
     return 'private_validation';
@@ -85,7 +85,7 @@ export function classifyUiRun(
     run.pendingOperatorGuidance ||
     run.manualGate !== null ||
     run.effectiveStatus === 'paused' ||
-    run.resumeDecision.kind === 'continue'
+    run.resumeDecision?.kind === 'continue'
   ) {
     return 'needs_you';
   }
@@ -356,9 +356,11 @@ async function serveUiAsset(
 ) {
   const relativePath = pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, '');
   const resolvedPath = resolve(staticRoot, relativePath);
-  const rootPrefix = staticRoot.endsWith('/') ? staticRoot : `${staticRoot}/`;
-
-  if (resolvedPath !== staticRoot && !resolvedPath.startsWith(rootPrefix)) {
+  const relativeAssetPath = resolvedPath.slice(staticRoot.length);
+  if (
+    resolvedPath !== staticRoot &&
+    (!relativeAssetPath || (!relativeAssetPath.startsWith('/') && !relativeAssetPath.startsWith('\\\\')))
+  ) {
     throw new UiHttpError(404, 'Asset not found.');
   }
 
