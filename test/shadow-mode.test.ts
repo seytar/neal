@@ -25,6 +25,22 @@ test('shadow profile mechanically disables coder shell while normal mode is unch
   assert.match(shadow, /Do not claim runtime verification passed/);
 });
 
+test('Shadow verify exposes only Neal-approved verification commands', () => {
+  const commands = ['pnpm test', 'php -l app/Foo.php'];
+  assert.deepEqual(getExecutionCoderToolPolicy('shadow', 'verify', commands), {
+    allowRun: true,
+    allowedRunCommands: commands,
+  });
+  assert.deepEqual(getExecutionCoderToolPolicy('shadow', 'verify', []), { allowRun: false });
+
+  const prompt = applyExecutionProfilePrompt('implement', 'shadow', 'verify', commands);
+  assert.match(prompt, /verify policy/);
+  assert.match(prompt, /pnpm test/);
+  assert.match(prompt, /php -l app\/Foo\.php/);
+  assert.match(prompt, /Do not start applications, servers, watchers/);
+  assert.match(prompt, /Do not create a manual gate solely because private\/live runtime evidence is unavailable/);
+});
+
 test('Shadow does not pin planner or reviewer providers', () => {
   const planners = ['openai-codex', 'anthropic-claude', 'openai-compatible'] as const;
   const reviewers = ['openai-codex', 'anthropic-claude', 'openai-compatible'] as const;
@@ -105,6 +121,8 @@ async function createShadowWaitingState() {
     },
     '1111111111111111111111111111111111111111',
   );
+  assert.equal(state.shadowExecutionPolicy, 'verify');
+
   return {
     ...state,
     phase: 'awaiting_private_validation' as const,
