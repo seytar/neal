@@ -284,6 +284,9 @@ The first version focuses on daily writer-run control:
 - rendered Markdown previews with a Preview/Raw switch
 - structured Changes and Usage inspectors with Raw JSON fallback
 - physical source paths and source explanations for displayed run/artifact data
+- a command catalog generated from Neal's canonical `neal help` surface
+- exact command previews for UI writer actions
+- live phase, active command, recent event, and next-action monitoring from `events.ndjson`
 
 The server binds only to the loopback interface. State-changing requests require
 an in-memory per-process write token injected into the locally served page.
