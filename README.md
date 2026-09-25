@@ -228,13 +228,20 @@ neal execute PLAN.md --no-squash
 
 Shadow mode is for an already-anonymized or otherwise non-runnable checkout.
 Anonymization, identifier mapping, and applying the resulting changes back to a
-private repository stay outside neal. Shadow mode changes the execution
-contract: coder turns may read and write source files, but neal requires a
-provider adapter that can mechanically remove shell/command execution.
+private repository stay outside neal. Shadow coder turns may read and write
+source files, while command execution stays mechanically bounded.
+
+New Shadow runs use the `verify` policy by default. Under `verify`, Neal exposes
+only safe verification commands explicitly written as inline code in the active
+scope's `Verification:` field. Command chaining, shell wrappers, migrations,
+service/app startup, deploys, network probes, and other live/runtime operations
+remain unavailable. Use `--strict` for the historical no-command behavior.
+Legacy Shadow runs created before this policy existed resume as `strict`.
 
 ```bash
 neal plan PLAN.md
-neal shadow execute PLAN.md
+neal shadow execute PLAN.md             # verify (default)
+neal shadow execute PLAN.md --strict    # no command execution
 
 # After applying/re-mapping the changes, validate in the private repository.
 # If private validation fails, sanitize the diagnostic before giving it to neal:
@@ -253,8 +260,9 @@ same run for corrective work, and `shadow accept` records the operator's
 explicit validation assertion before the run may become `done`.
 
 Shadow mode is provider-capability-driven, not provider-name-driven. Any coder
-adapter that can enforce the required no-shell policy may participate; see
-[docs/providers.md](docs/providers.md) and [SECURITY.md](SECURITY.md).
+adapter that can mechanically enforce the configured Shadow command boundary
+may participate; see [docs/providers.md](docs/providers.md) and
+[SECURITY.md](SECURITY.md).
 
 Refine and execute one or more plans serially:
 
@@ -330,7 +338,7 @@ neal compat [--model <slug>] [--role coder|reviewer|planner|all] [--reference op
 neal run [--no-squash] <plan.md> [more-plans...]
 neal plan <plan.md>
 neal execute <plan.md> [--no-squash]
-neal shadow execute <plan.md> [--no-squash]
+neal shadow execute <plan.md> [--verify|--strict] [--no-squash]
 neal shadow feedback --file <sanitized-feedback.txt> [--run <run-id>]
 neal shadow accept [--run <run-id>] [--note "..."]
 neal resume [--run <run-id>] [--message "..."]
