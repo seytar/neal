@@ -916,7 +916,7 @@ const AXIS_CONFORMANCE: AxisConformanceCase[] = [
   {
     withKey: 'buildFinalCompletionSummaryPrompt#executionProfile=shadow',
     withoutKey: 'buildFinalCompletionSummaryPrompt#executionProfile=normal',
-    sentinel: 'Shadow mode is active: shell execution was intentionally disabled during implementation.',
+    sentinel: 'Shadow mode is active: arbitrary shell and private/live runtime execution are restricted during implementation.',
   },
   {
     withKey: 'buildFinalCompletionReviewerPrompt#accessMode=read-only-tool#aggregateRange=available#executionProfile=shadow#reviewLevel=moderate',
