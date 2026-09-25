@@ -60,7 +60,54 @@ function formatNumber(value) {
 }
 
 function formatCost(value) {
-  return typeof value === 'number' ? '
+  return typeof value === 'number' ? '$' + value.toFixed(4) : 'n/a';
+}
+
+function InfoTip({ text }) {
+  return (
+    <span className="info-tip" title={text} aria-label={text}>
+      i
+    </span>
+  );
+}
+
+function CopyPathButton({ path }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(path);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <button type="button" className="path-copy" onClick={copy}>
+      {copied ? 'copied' : 'copy'}
+    </button>
+  );
+}
+
+function SourceStrip({ sources }) {
+  return (
+    <div className="source-strip">
+      {sources.map((source) => (
+        <div className="source-row" key={source.label + source.path}>
+          <span className="source-label">
+            {source.label}
+            <InfoTip text={source.info} />
+          </span>
+          <code title={source.path}>{source.path}</code>
+          <CopyPathButton path={source.path} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StatusPill({ lane }) {
   return <span className={'pill ' + lane}>{laneLabel(lane)}</span>;
 }
