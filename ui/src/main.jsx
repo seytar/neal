@@ -128,15 +128,6 @@ function ActionPanel({
     );
   }
 
-  if (detail.action?.status === 'failed') {
-    return (
-      <section className="card error-card">
-        <h2>Last UI action failed</h2>
-        <p className="body-copy">{detail.action.error}</p>
-      </section>
-    );
-  }
-
   if (status.phase === 'awaiting_private_validation') {
     return (
       <section className="card validation-card">
@@ -533,6 +524,12 @@ function App() {
               </div>
               <StatusPill lane={detail.uiLane} />
             </header>
+
+            {detail.action?.status === 'failed' ? (
+              <div className="global-error">
+                Last UI action failed: {detail.action.error}
+              </div>
+            ) : null}
 
             <div className="detail-grid">
               <ActionPanel
