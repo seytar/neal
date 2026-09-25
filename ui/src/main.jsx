@@ -413,13 +413,11 @@ function MarkdownPreview({ content }) {
   );
 }
 
-function ChangesPreview({ data, detail }) {
+function ChangesPreview({ data }) {
   const currentFiles = [...new Set([
     ...(data.currentScope?.files || []),
     ...(data.worktree?.files || []),
   ])].sort();
-  const runStatePath = detail.status.artifacts.runStatePath;
-
   return (
     <div className="structured-preview">
       <div className="metric-grid">
@@ -474,7 +472,7 @@ function ChangesPreview({ data, detail }) {
   );
 }
 
-function UsagePreview({ data, detail }) {
+function UsagePreview({ data }) {
   const providers = data.metrics?.providers || [];
   const totalTokens = providers.reduce(
     (sum, provider) => sum + Number(provider.usage?.totalTokens || 0),
@@ -633,12 +631,12 @@ function ArtifactPanel({
         ) : artifact?.kind === 'changes' ? (
           <>
             {sources.length ? <SourceStrip sources={sources} /> : null}
-            <ChangesPreview data={artifact.data} detail={detail} />
+            <ChangesPreview data={artifact.data} />
           </>
         ) : artifact?.kind === 'usage' ? (
           <>
             {sources.length ? <SourceStrip sources={sources} /> : null}
-            <UsagePreview data={artifact.data} detail={detail} />
+            <UsagePreview data={artifact.data} />
           </>
         ) : null}
       </section>
