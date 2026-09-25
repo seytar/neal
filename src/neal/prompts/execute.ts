@@ -1,4 +1,4 @@
-import type { ExecutionProfile, ReviewFinding } from '../types.js';
+import type { ReviewFinding } from '../types.js';
 import {
   AGENT_FREE_TEXT_SECTION_MAX_CHARS,
   boundChangedFileList,
@@ -223,7 +223,6 @@ export function buildReviewerPrompt(args: {
   // Reviewer strictness from `neal.review_level`, resolved by rounds.ts via
   // getReviewLevel(cwd). Defaults to 'moderate'.
   reviewLevel?: ReviewLevel;
-  executionProfile?: ExecutionProfile;
 }) {
   const spec = assertPromptBuilder('scope_reviewer', 'buildReviewerPrompt', PROMPT_MODULE_PATH);
   const primaryVariant = spec.variants.find((variant) => variant.kind === 'primary');
@@ -262,15 +261,6 @@ export function buildReviewerPrompt(args: {
           'Do not create project-root scratch directories such as build_review/.',
           'Do not leave project-tree scratch files behind; keep scratch work under the run-local directory above.',
         ];
-  const shadowLines = args.executionProfile === 'shadow'
-    ? [
-        'Shadow mode is active. Review the implementation statically and use any verification evidence that actually exists, but treat private/live runtime validation as a later explicit gate.',
-        'The absence of evidence that requires a private dependency tree, live application server, credentials, database, external store, network access, or other unavailable runtime state is not by itself a blocking finding in this scope review.',
-        'Do not require the coder to open a manual gate solely to obtain private/live runtime evidence. If the implementation is statically correct, leave that evidence for Shadow private validation after static acceptance.',
-        'Static correctness defects, missing implementation, unsafe code, and verification tooling or test gaps that are visible in the repository remain ordinary review findings and may still block.',
-        'Do not use meaningfulProgressAction=block_for_operator solely because private/live runtime evidence is pending.',
-      ]
-    : [];
   const skepticismLines = getVerificationSkepticismLines({
     reviewTarget: 'scope diff',
     mode: accessMode,
@@ -291,7 +281,6 @@ export function buildReviewerPrompt(args: {
     `Commit range: ${args.baseCommit}..${args.headCommit}.`,
     ...falsificationLines,
     ...scratchLines,
-    ...shadowLines,
     ...getAdversarialReviewDoctrineLines({
       reviewSubject: 'the scope diff',
     }),
