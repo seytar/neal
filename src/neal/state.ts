@@ -1151,9 +1151,12 @@ function normalizeStateV1(parsed: unknown): OrchestrationState {
   const plannerSessionHandle = migrateLegacyPlannerSession ? coderSessionHandle : persistedPlannerSessionHandle;
   const plannerSessionProtocol = migrateLegacyPlannerSession ? coderSessionProtocol : persistedPlannerSessionProtocol;
   const executionProfile = readOptionalEnum(state, 'executionProfile', ['normal', 'shadow'] as const) ?? 'normal';
+  const persistedShadowExecutionPolicy = hasOwn(state, 'shadowExecutionPolicy')
+    ? readNullableEnum(state, 'shadowExecutionPolicy', SHADOW_EXECUTION_POLICIES)
+    : undefined;
   const shadowExecutionPolicy = executionProfile === 'shadow'
-    ? (readOptionalEnum(state, 'shadowExecutionPolicy', SHADOW_EXECUTION_POLICIES) ?? 'strict')
-    : (readOptionalEnum(state, 'shadowExecutionPolicy', SHADOW_EXECUTION_POLICIES) ?? null);
+    ? (persistedShadowExecutionPolicy === undefined ? 'strict' : persistedShadowExecutionPolicy)
+    : (persistedShadowExecutionPolicy ?? null);
 
   return {
     version: 1,
