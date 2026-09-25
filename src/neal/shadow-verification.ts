@@ -101,10 +101,6 @@ export function extractShadowVerificationCommands(planDocument: string, planScop
     candidates.push(match[1] ?? '');
   }
 
-  if (candidates.length === 0 && text.trim()) {
-    candidates.push(text.trim());
-  }
-
   return [...new Set(candidates.map((command) => command.trim()).filter(isSafeShadowVerificationCommand))];
 }
 
