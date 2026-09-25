@@ -123,6 +123,7 @@ export async function initializeOrchestration(
     runDir?: string;
     autoSquashOnCompletion?: boolean;
     executionProfile?: OrchestrationState['executionProfile'];
+    shadowExecutionPolicy?: OrchestrationState['shadowExecutionPolicy'];
     inheritedPlanReviewDebt?: ResidualReviewDebtItem[];
   },
 ) {
@@ -146,6 +147,7 @@ export async function initializeOrchestration(
     runDir: logger.runDir,
     topLevelMode,
     executionProfile: options?.executionProfile ?? 'normal',
+    shadowExecutionPolicy: options?.shadowExecutionPolicy,
     allowedDirtyPaths: options?.allowedDirtyPaths ?? [],
     agentConfig,
     autoSquashOnCompletion: options?.autoSquashOnCompletion ?? true,
@@ -172,6 +174,7 @@ export async function initializeOrchestration(
     baseCommit,
     topLevelMode,
     executionProfile: savedState.executionProfile,
+    shadowExecutionPolicy: savedState.shadowExecutionPolicy,
     planDocBackupPath,
     agentConfig: savedState.agentConfig,
     reviewMarkdownPath: savedState.reviewMarkdownPath,
@@ -265,6 +268,7 @@ export async function loadOrInitialize(
     runDir?: string;
     autoSquashOnCompletion?: boolean;
     executionProfile?: OrchestrationState['executionProfile'];
+    shadowExecutionPolicy?: OrchestrationState['shadowExecutionPolicy'];
     inheritedPlanReviewDebt?: ResidualReviewDebtItem[];
   },
 ) {
@@ -315,6 +319,7 @@ export async function initializeNewRun(
     runDir?: string;
     autoSquashOnCompletion?: boolean;
     executionProfile?: OrchestrationState['executionProfile'];
+    shadowExecutionPolicy?: OrchestrationState['shadowExecutionPolicy'];
     inheritedPlanReviewDebt?: ResidualReviewDebtItem[];
   },
 ) {
