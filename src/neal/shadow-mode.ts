@@ -68,6 +68,31 @@ export function applyExecutionProfilePrompt(
 
 
 
+export function applyShadowCompletionSummaryPrompt(
+  prompt: string,
+  executionProfile: ExecutionProfile,
+): string {
+  if (executionProfile !== 'shadow') {
+    return prompt;
+  }
+
+  const legacyBlock = [
+    'Shadow mode is active: shell execution was intentionally disabled during implementation.',
+    'Judge planGoalSatisfied by static implementation completeness. Private runtime validation is a later explicit gate.',
+    'The absence of runtime/build/test command evidence is expected in Shadow mode and must not by itself become a remainingKnownGap.',
+    'State clearly in verificationSummary that runtime verification was not run in Neal.',
+  ].join('\n');
+
+  const policyAwareBlock = [
+    'Shadow mode is active: arbitrary shell and private/live runtime execution are restricted during implementation.',
+    'Judge planGoalSatisfied by static implementation completeness. Private runtime validation is a later explicit gate.',
+    'Summarize any local verification commands that actually ran, but distinguish them from private/live runtime validation that is still pending.',
+    'The absence of private/live runtime evidence is expected in Shadow mode and must not by itself become a remainingKnownGap.',
+  ].join('\n');
+
+  return prompt.replace(legacyBlock, policyAwareBlock);
+}
+
 export function applyReviewerExecutionProfilePrompt(
   prompt: string,
   executionProfile: ExecutionProfile,
