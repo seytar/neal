@@ -396,12 +396,28 @@ async function buildUiConfigSnapshot(cwd: string) {
       baseUrl: openai.baseUrl,
       apiKeyEnv: openai.apiKeyEnv,
       apiKeyConfigured: Boolean(openai.apiKey),
+      credentialSource: {
+        kind: 'environment' as const,
+        path: null,
+        key: openai.apiKeyEnv,
+        note: `Secret presence is checked in process.env.${openai.apiKeyEnv}; the value is never returned to the browser.`,
+      },
       defaultModel: openai.defaultModel,
       structuredOutputMode: openai.structuredOutputMode ?? null,
       sources: {
-        baseUrl: configSourceFor(repoConfig, userConfig, sources, 'providers.openai_compatible.base_url'),
+        baseUrl: (() => {
+          const source = configSourceFor(repoConfig, userConfig, sources, 'providers.openai_compatible.base_url');
+          return source.kind === 'default' && process.env.OPENAI_COMPATIBLE_BASE_URL
+            ? { kind: 'environment' as const, path: null, key: 'OPENAI_COMPATIBLE_BASE_URL' }
+            : source;
+        })(),
         apiKeyEnv: configSourceFor(repoConfig, userConfig, sources, 'providers.openai_compatible.api_key_env'),
-        defaultModel: configSourceFor(repoConfig, userConfig, sources, 'providers.openai_compatible.default_model'),
+        defaultModel: (() => {
+          const source = configSourceFor(repoConfig, userConfig, sources, 'providers.openai_compatible.default_model');
+          return source.kind === 'default' && process.env.OPENAI_COMPATIBLE_MODEL
+            ? { kind: 'environment' as const, path: null, key: 'OPENAI_COMPATIBLE_MODEL' }
+            : source;
+        })(),
         structuredOutputMode: configSourceFor(repoConfig, userConfig, sources, 'providers.openai_compatible.structured_output_mode'),
       },
     },
