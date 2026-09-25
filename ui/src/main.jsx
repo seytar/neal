@@ -164,6 +164,15 @@ function CommandsPanel({ catalog, open, onClose }) {
   );
 }
 
+function TerminalStatusLine({ line, loading }) {
+  return (
+    <div className="terminal-status-line" title={line || ''}>
+      <span className="terminal-prompt">›</span>
+      <code>{line || (loading ? '[neal] loading status…' : '[neal] status unavailable')}</code>
+    </div>
+  );
+}
+
 function LiveActivity({ activity, loading }) {
   const running = activity?.action?.status === 'running' || activity?.status === 'running';
   const events = activity?.events || [];
@@ -184,6 +193,8 @@ function LiveActivity({ activity, loading }) {
 
   return (
     <section className="live-strip">
+      <TerminalStatusLine line={activity?.terminalFooterLine} loading={loading} />
+
       <div className="live-primary">
         <div className="live-state">
           {running || loading ? <span className="pulse" /> : <span className="live-dot" />}
