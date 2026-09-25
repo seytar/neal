@@ -72,10 +72,10 @@ export function buildFinalCompletionSummaryPrompt(args: {
     'Use `verificationSummary` to summarize the completion evidence that actually ran.',
     ...(args.packet.executionProfile === 'shadow'
       ? [
-          'Shadow mode is active: arbitrary shell and private/live runtime execution are restricted during implementation.',
+          'Shadow mode is active: shell execution was intentionally disabled during implementation.',
           'Judge planGoalSatisfied by static implementation completeness. Private runtime validation is a later explicit gate.',
-          'Summarize any local verification commands that actually ran, but distinguish them from private/live runtime validation that is still pending.',
-          'The absence of private/live runtime evidence is expected in Shadow mode and must not by itself become a remainingKnownGap.',
+          'The absence of runtime/build/test command evidence is expected in Shadow mode and must not by itself become a remainingKnownGap.',
+          'State clearly in verificationSummary that runtime verification was not run in Neal.',
         ]
       : []),
     'Before claiming a step is done or a verification passed, confirm the claim against an actual tool or command result from this session, and do not claim verification that did not actually run.',
