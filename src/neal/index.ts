@@ -7,6 +7,7 @@ import process from 'node:process';
 import {
   buildUsageLines,
 } from './cli.js';
+import { runChangesCommand } from './commands/changes.js';
 import { runCheckCommand } from './commands/check.js';
 import { runCompatCommand } from './commands/compat.js';
 import { runNewRunCommand } from './commands/new-run.js';
@@ -15,8 +16,10 @@ import { runResumeRunCommand } from './commands/resume-run.js';
 import { getCurrentRunLogger } from './commands/runtime.js';
 import { runReviewCommand } from './commands/review.js';
 import { runSetupCommand } from './commands/setup.js';
+import { runShadowCommand } from './commands/shadow.js';
 import { runSquashCommand } from './commands/squash.js';
 import { runStatusCommand } from './commands/status.js';
+import { runUsageCommand } from './commands/usage.js';
 import {
   formatWriterProviderSetupRequiredLines,
   isWriterProvidersNotConfiguredError,
@@ -78,6 +81,16 @@ async function main() {
     return;
   }
 
+  if (args[0] === 'usage') {
+    await runUsageCommand(args);
+    return;
+  }
+
+  if (args[0] === 'changes') {
+    await runChangesCommand(args);
+    return;
+  }
+
   if (args[0] === 'review') {
     await runReviewCommand(args);
     return;
@@ -85,6 +98,11 @@ async function main() {
 
   if (args[0] === 'setup') {
     await runSetupCommand(args);
+    return;
+  }
+
+  if (args[0] === 'shadow') {
+    await runShadowCommand(args);
     return;
   }
 

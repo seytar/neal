@@ -6,8 +6,8 @@ import { parseNewRunArgs } from '../cli.js';
 import { assertWriterProvidersConfigured } from '../config.js';
 import { assertGitRepositoryWithCommit } from '../git.js';
 import { loadOrInitialize } from '../orchestrator.js';
-import { assertAgentConfigSupportsWriterRun } from '../providers/registry.js';
-import type { AgentConfig } from '../types.js';
+import { assertAgentConfigSupportsShadowRun, assertAgentConfigSupportsWriterRun } from '../providers/registry.js';
+import type { AgentConfig, ExecutionProfile } from '../types.js';
 import { executeRun, withPreparedWriterRun } from './runtime.js';
 import { getExecuteRunResultExitCode, setWriterCommandExitCode } from './writer-exit-codes.js';
 
@@ -26,8 +26,13 @@ const PARSE_ONLY_AGENT_CONFIG: AgentConfig = {
   },
 };
 
-export async function runNewRunCommand(args: string[]): Promise<void> {
+export type NewRunCommandOptions = {
+  executionProfile?: ExecutionProfile;
+};
+
+export async function runNewRunCommand(args: string[], options: NewRunCommandOptions = {}): Promise<void> {
   const parsedArgs = parseNewRunArgs(args, PARSE_ONLY_AGENT_CONFIG);
+  const executionProfile = options.executionProfile ?? 'normal';
   const cwd = process.cwd();
   const agentConfig = assertWriterProvidersConfigured(cwd, {
     context: `new ${parsedArgs.topLevelMode} writer run`,
@@ -36,7 +41,14 @@ export async function runNewRunCommand(args: string[]): Promise<void> {
     ...parsedArgs,
     agentConfig,
   };
-  assertAgentConfigSupportsWriterRun(parsed.agentConfig, { context: `new ${parsed.topLevelMode} writer run` });
+  if (executionProfile === 'shadow') {
+    if (parsed.topLevelMode !== 'execute') {
+      throw new Error('Shadow mode currently supports execute runs only.');
+    }
+    assertAgentConfigSupportsShadowRun(parsed.agentConfig, { context: 'new shadow execute writer run' });
+  } else {
+    assertAgentConfigSupportsWriterRun(parsed.agentConfig, { context: `new ${parsed.topLevelMode} writer run` });
+  }
 
   const planDoc = resolve(cwd, parsed.planDoc);
   await assertGitRepositoryWithCommit(cwd, `neal ${parsed.topLevelMode}`);
@@ -51,10 +63,16 @@ export async function runNewRunCommand(args: string[]): Promise<void> {
       const loaded = await loadOrInitialize(planDoc, cwd, parsed.agentConfig, undefined, parsed.topLevelMode, {
         allowedDirtyPaths: parsed.topLevelMode === 'execute' ? [planDoc] : [],
         runDir: prepared.runDir,
-        autoSquashOnCompletion: parsed.squashOnCompletion,
+        executionProfile,
+        // Preserve generated commits until private validation is explicitly accepted.
+        autoSquashOnCompletion: executionProfile === 'shadow' ? false : parsed.squashOnCompletion,
       });
       markInitialized();
-      assertAgentConfigSupportsWriterRun(loaded.state.agentConfig, { context: `new ${loaded.state.topLevelMode} writer run` });
+      if (loaded.state.executionProfile === 'shadow') {
+        assertAgentConfigSupportsShadowRun(loaded.state.agentConfig, { context: 'new shadow execute writer run' });
+      } else {
+        assertAgentConfigSupportsWriterRun(loaded.state.agentConfig, { context: `new ${loaded.state.topLevelMode} writer run` });
+      }
       return executeRun(loaded.state, loaded.statePath, loaded.logger, {
         // The `--no-squash` flag only seeds the run state; once persisted, the
         // state is the single source of truth so `neal resume` sees the same

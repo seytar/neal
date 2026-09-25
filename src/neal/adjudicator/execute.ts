@@ -842,6 +842,7 @@ export async function runExecuteResponseAdjudication(args: {
     verificationHint: buildVerificationHint(args.state),
     openFindings,
     mode: mode === 'optional' ? 'optional' : undefined,
+    executionProfile: args.state.executionProfile,
     sessionHandle: args.state.coderSessionHandle,
     logger: args.logger,
   });

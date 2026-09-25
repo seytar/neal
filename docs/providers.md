@@ -77,6 +77,8 @@ Each provider capability role declares:
 - model override support
 - neal structured control protocol support
 - usage reporting support
+- whether coder shell execution can be mechanically disabled while retaining
+  source-edit capability (`supportsShellDisable`)
 
 Capabilities are enforced before writer work starts or resumes. neal requires
 the planner and coder effective roles to resolve to providers with the coder
@@ -141,6 +143,20 @@ strength is adapter-specific and mechanical where each SDK allows it:
 
 Rounds without a `toolPolicy` are unaffected on every adapter: ordinary coder
 scope rounds keep full access because verification legitimately runs commands.
+
+Shadow execute rounds deliberately do carry a no-shell policy. Shadow eligibility
+is capability-based: `assertAgentConfigSupportsShadowRun` requires a writable
+structured coder whose adapter declares `supportsShellDisable: true`. Every
+Shadow coder surface receives `allowRun: false`; the registry rejects an
+adapter that cannot mechanically enforce it. Current built-in behavior is:
+
+- `anthropic-claude`: eligible; `Bash` is removed from the coder tool list.
+- `openai-compatible`: eligible; the neal-owned toolset omits `run`.
+- `openai-codex`: not currently eligible; `workspace-write` can constrain
+  writes but still exposes command execution.
+
+This list describes current implementations, not a provider allowlist. A future
+adapter becomes Shadow-eligible by satisfying the same capability contract.
 
 ### The read-only reviewer invariant
 
@@ -531,20 +547,24 @@ Role support and behavior:
   in a single dedicated finalization turn that carries no tools. The same
   adapter also serves the final-completion summary gate when
   `openai-compatible` is the coder.
-- No session resume (`supportsSessionResume: false` on both roles). The
-  adapter never persists a provider session handle, so `neal resume` after an
-  interruption or failure restarts the interrupted scope from scratch in a
-  fresh session rather than resuming mid-conversation. Already-accepted
-  scopes stay committed. Only the in-flight scope is redone. Top-level
-  plan-refinement revision rounds likewise start a fresh planner session per
-  round instead of resuming the planning conversation.
-- Step caps: each coder prompt's tool loop is bounded by the exported
-  `OPENAI_COMPATIBLE_MAX_STEPS` constant (currently `48` model turns per
-  prompt). Structured-advisor/reviewer rounds use the smaller exported
-  `OPENAI_COMPATIBLE_ADVISOR_MAX_STEPS` constant (currently `24`: reviews are
-  bounded inspections, not implementations). Reaching either cap fails the
-  attempt with a non-retryable `provider_failed` error naming the cap. There
-  are no config knobs for the caps.
+- Coder/planner session resume. The coder capability declares
+  `supportsSessionResume: true`. Neal persists the adapter-owned message
+  history under `.neal/provider-sessions/openai-compatible/` and stores the
+  opaque handle in the normal writer-run session fields. `neal resume`
+  therefore continues an interrupted coder or planner conversation, including
+  a partially completed tool loop or structured-finalization turn. The turn
+  cap is per adapter invocation, so a resumed invocation receives a fresh turn
+  budget while preserving prior context. Existing scope-boundary resets still
+  clear the coder handle, so each new scope starts with fresh context. The
+  structured-advisor/reviewer role remains sessionless
+  (`supportsSessionResume: false`).
+- Step caps: each coder prompt's tool loop defaults to
+  `OPENAI_COMPATIBLE_MAX_STEPS` (currently `48` model turns per prompt), and
+  structured-advisor/reviewer rounds default to
+  `OPENAI_COMPATIBLE_ADVISOR_MAX_STEPS` (currently `24`). Repositories can
+  override those defaults with `neal.openai_compatible_max_steps` and
+  `neal.openai_compatible_advisor_max_steps`. Reaching either cap fails the
+  attempt with a non-retryable `provider_failed` error naming the cap.
 - Reviewer telemetry: advisor rounds report cumulative per-tool call and
   error counts plus a `steps` count (model turns consumed) under
   `providerData` on `turn_completed` / `usage_reported` events, so
@@ -592,14 +612,20 @@ models on a disposable project before using them on real work.
 
 Add a `providers.openai_compatible` block (repo `neal.yml` overrides
 `~/.neal/config.yml`, matching normal config precedence) and point one or
-more roles at the provider. A worked DeepSeek example:
+more roles at the provider. Runtime step caps are optional `neal` settings;
+for example, a tool-heavy coder can raise the default 48-turn cap to 200
+without changing the advisor cap:
 
 ```yaml
+neal:
+  openai_compatible_max_steps: 200
+
 providers:
   openai_compatible:
     base_url: https://api.deepseek.com
     api_key_env: DEEPSEEK_API_KEY
-    default_model: deepseek-chat
+    default_model: deepseek-flash
+    structured_output_mode: json_object
 
 agent:
   coder:
@@ -633,7 +659,13 @@ OpenRouter config above routes planning through `openai-compatible` too.
 Structured-advisor rounds additionally honor a neal-internal round-level model
 override first.
 
-Settings resolve config-first with environment fallbacks:
+The loop-cap settings are positive integers:
+
+- `neal.openai_compatible_max_steps`: coder tool-loop cap; default `48`.
+- `neal.openai_compatible_advisor_max_steps`: structured-advisor/reviewer
+  read-only tool-loop cap; default `24`.
+
+Provider connection settings resolve config-first with environment fallbacks:
 
 - `base_url`: `providers.openai_compatible.base_url`, else
   `OPENAI_COMPATIBLE_BASE_URL`. Required.
@@ -643,6 +675,13 @@ Settings resolve config-first with environment fallbacks:
 - model: the role-level `agent.<role>.model` override, else
   `providers.openai_compatible.default_model`, else `OPENAI_COMPATIBLE_MODEL`.
   One of these is required.
+- `structured_output_mode`: optional transport capability, `json_schema`
+  (default) or `json_object`. This is not DeepSeek-specific. Choose
+  `json_schema` when the endpoint natively enforces JSON Schema; choose
+  `json_object` when the endpoint supports OpenAI-compatible JSON mode but
+  not schema-enforced response formats (direct DeepSeek Chat Completions is
+  one example). In `json_object` mode the transport guarantees valid JSON
+  and Neal applies the same protocol schema validator locally.
 - `headers`: optional string-to-string map of extra HTTP headers (useful for
   OpenRouter attribution headers).
 - `pricing`: an **optional override** for per-million-token rates. It is no

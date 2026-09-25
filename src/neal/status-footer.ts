@@ -45,6 +45,7 @@ const FOOTER_ACTIVITY_LABELS = {
   interactive_blocked_recovery: 'waiting for guidance',
   [EXECUTE_FINALIZATION_PHASE]: 'finalizing scope',
   final_completion_review: 'reviewer final check',
+  awaiting_private_validation: 'waiting for private validation',
   done: 'done',
   blocked: 'blocked',
 } as const satisfies Record<OrchestrationState['phase'], string>;
@@ -115,6 +116,9 @@ export function renderStatusFooterLine(args: FooterContext) {
 }
 
 function formatFooterActivity(state: OrchestrationState) {
+  if (state.phase === 'awaiting_private_validation') {
+    return 'waiting for private validation';
+  }
   if (state.status === 'paused') {
     return 'paused after scope';
   }

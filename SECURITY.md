@@ -27,6 +27,37 @@ Treat any provider acting in the coder or planner role as capable of running
 arbitrary commands and modifying anything the current user can reach, unless you
 have added external sandboxing yourself.
 
+### Shadow mode: no-shell execution profile
+
+`neal shadow execute` is an execute-mode profile for checkouts where runtime
+verification must happen elsewhere. It does not choose a particular provider.
+Instead, the provider registry requires the configured coder adapter to declare
+and mechanically implement shell-disable support. Neal passes
+`toolPolicy.allowRun: false` to every Shadow coder surface, including primary
+scope work, reviewer-response fixes, and blocked-recovery turns. An adapter that
+cannot make that guarantee is rejected before writer work starts or resumes.
+
+For the built-in adapters today, Anthropic Claude removes `Bash` from the
+coder tool list and `openai-compatible` omits its `run` tool. The current
+OpenAI Codex coder is not Shadow-eligible because its strongest writable
+sandbox still permits command execution. These are current adapter properties,
+not hard-coded provider-name policy.
+
+Shadow mode is **not** an anonymizer, de-anonymizer, network sandbox, or general
+filesystem read jail. The operator is responsible for supplying an already
+sanitized checkout and for sanitizing any private validation diagnostics before
+passing them to `neal shadow feedback`. Reviewer read boundaries are unchanged
+from normal neal; in particular, read-only does not necessarily mean
+repository-only reads.
+
+A Shadow run cannot transition from static final-review acceptance directly to
+`done`. It stops at `awaiting_private_validation`. Private failures can be
+fed back as sanitized text with `neal shadow feedback`, which reopens the same
+run while preserving the no-shell policy. Only the operator's explicit
+`neal shadow accept` assertion records private validation and permits
+`status: done`. Neal does not inspect the private repository and does not
+independently verify that assertion.
+
 ### Reviewer role: read-only
 
 The reviewer role is **read-only**, enforced in two layers:

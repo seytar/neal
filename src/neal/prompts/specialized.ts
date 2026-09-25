@@ -70,6 +70,14 @@ export function buildFinalCompletionSummaryPrompt(args: {
     'Use `planGoalSatisfied` to state whether the plan goal is satisfied overall.',
     'Use `whatChangedOverall` to summarize the completed work across the whole plan, not just the last scope.',
     'Use `verificationSummary` to summarize the completion evidence that actually ran.',
+    ...(args.packet.executionProfile === 'shadow'
+      ? [
+          'Shadow mode is active: shell execution was intentionally disabled during implementation.',
+          'Judge planGoalSatisfied by static implementation completeness. Private runtime validation is a later explicit gate.',
+          'The absence of runtime/build/test command evidence is expected in Shadow mode and must not by itself become a remainingKnownGap.',
+          'State clearly in verificationSummary that runtime verification was not run in Neal.',
+        ]
+      : []),
     'Before claiming a step is done or a verification passed, confirm the claim against an actual tool or command result from this session, and do not claim verification that did not actually run.',
     'Use `remainingKnownGaps` for any known missing work, regressions, quality concerns, testing gaps, risks, or omissions that would make the plan not fully complete.',
     'Do not contradict yourself:',
@@ -79,6 +87,7 @@ export function buildFinalCompletionSummaryPrompt(args: {
     'Whole-plan completion packet:',
     JSON.stringify(
       {
+        ...(args.packet.executionProfile === 'shadow' ? { executionProfile: 'shadow' as const } : {}),
         executionShape: args.packet.executionShape,
         currentScopeLabel: args.packet.currentScopeLabel,
         acceptedScopeRecordCount: args.packet.acceptedScopeCount,
@@ -266,7 +275,15 @@ export function buildFinalCompletionReviewerPrompt(args: {
     ...getReviewLevelCalibrationLines({ level: reviewLevel, outputContract: 'completion_verdict' }),
     ...falsificationLines,
     ...scratchLines,
-    'Falsify cross-scope runtime invariants and integration behavior before accepting completion, especially paths that individual scope reviews could not see together.',
+    ...(args.packet.executionProfile === 'shadow'
+      ? [
+          'Shadow mode is active. Perform static cross-scope reasoning, but do not require runtime command evidence as a condition of static acceptance.',
+          'If the implementation is statically complete and reviewable, accept_complete may be used even though private runtime validation is still pending; Neal will pause before done.',
+          'Do not claim that tests, builds, migrations, services, or runtime checks passed.',
+        ]
+      : [
+          'Falsify cross-scope runtime invariants and integration behavior before accepting completion, especially paths that individual scope reviews could not see together.',
+        ]),
     'If `aggregateReviewContext.unavailableReason` is non-null, treat the missing aggregate range as a completion-review evidence gap rather than proof that the aggregate implementation is correct.',
     ...skepticismLines,
     ...regressionLines,

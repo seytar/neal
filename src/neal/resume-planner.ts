@@ -192,6 +192,10 @@ export async function applyResumeActions(
 }
 
 function planStatusResumeAction(state: OrchestrationState): ResumeAction | null {
+  if (state.phase === 'awaiting_private_validation') {
+    return null;
+  }
+
   if (state.status === 'blocked' && isResumableBlockedPhase(state.blockedFromPhase)) {
     const sessionRole = getResumableBlockedSessionRole(state.blockedFromPhase);
     const sessionHandle = sessionRole === 'planner' ? state.plannerSessionHandle : state.coderSessionHandle;

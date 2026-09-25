@@ -338,6 +338,8 @@ function renderPhaseEvents(
           line: `Reviewer is checking final completion.`,
         },
       ];
+    case 'awaiting_private_validation':
+      return [];
     case 'done':
     case 'blocked':
       return [];
@@ -403,6 +405,15 @@ function renderLifecycleEvents(
 
   if (displayStatus.waitingForOperatorGuidance || displayStatus.pendingOperatorGuidance) {
     return [];
+  }
+
+  if (state.phase === 'awaiting_private_validation') {
+    return [
+      {
+        signature: `lifecycle:${runId}:awaiting-private-validation`,
+        line: `Static review accepted; waiting for private validation.`,
+      },
+    ];
   }
 
   if (state.status === 'paused') {

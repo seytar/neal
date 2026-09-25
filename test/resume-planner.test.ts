@@ -272,3 +272,13 @@ test('restoring a coder-authored plan-response block clears the durable blocker 
   assert.equal(reloaded.status, 'running');
   assert.equal(reloaded.blockerReason, null);
 });
+
+
+test('resume planner preserves the shadow private-validation gate', async () => {
+  const state = await createPlannerState({
+    executionProfile: 'shadow',
+    phase: 'awaiting_private_validation',
+    status: 'paused',
+  });
+  assert.deepEqual(actionKinds(state), []);
+});

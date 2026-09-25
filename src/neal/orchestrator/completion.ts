@@ -802,8 +802,8 @@ export async function runFinalCompletionReviewPhase(
     actionResolution.effectiveAction === 'accept_complete'
       ? await saveState(statePath, {
           ...baseState,
-          phase: 'done',
-          status: 'done',
+          phase: state.executionProfile === 'shadow' ? 'awaiting_private_validation' : 'done',
+          status: state.executionProfile === 'shadow' ? 'paused' : 'done',
           blockedFromPhase: null,
         })
       : actionResolution.effectiveAction === 'continue_execution'
@@ -842,7 +842,7 @@ export async function runFinalCompletionReviewPhase(
     nextPhase: nextState.phase,
   });
 
-  if (actionResolution.effectiveAction === 'accept_complete') {
+  if (actionResolution.effectiveAction === 'accept_complete' && state.executionProfile !== 'shadow') {
     const finalSubject = terminalScope?.commitSubject ?? 'Finalize scope work';
     await notifyComplete(nextState, finalSubject, logger);
   } else if (actionResolution.effectiveAction === 'block_for_operator') {

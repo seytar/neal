@@ -851,6 +851,7 @@ export async function runInteractiveBlockedRecoveryPhase(
       turnsTaken: pendingDirective ? state.interactiveBlockedRecovery.turns.length : latestTurn?.number ?? 0,
       terminalOnly,
       allowReplacement: true,
+      executionProfile: state.executionProfile,
       laterScopeRevision,
       sessionHandle: state.coderSessionHandle,
       logger,

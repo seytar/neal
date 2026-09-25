@@ -18,6 +18,7 @@ const PUBLIC_PHASE_LABELS = {
   interactive_blocked_recovery: 'waiting for recovery guidance',
   [EXECUTE_FINALIZATION_PHASE]: EXECUTE_FINALIZATION_PUBLIC_LABEL,
   final_completion_review: 'reviewing final completion',
+  awaiting_private_validation: 'waiting for private validation',
   done: 'done',
   blocked: 'blocked',
 } as const satisfies Record<OrchestrationPhase, string>;

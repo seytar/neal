@@ -267,6 +267,7 @@ export async function buildFinalCompletionPacket(args: {
 
   return {
     planDoc: args.state.planDoc,
+    executionProfile: args.state.executionProfile,
     executionShape: args.state.executionShape,
     currentScopeLabel: getCurrentScopeLabel(args.state),
     finalCommit,

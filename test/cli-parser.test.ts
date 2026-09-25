@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   buildUsageLines,
   DEFAULT_REVIEW_INSTRUCTION,
+  parseChangesArgs,
   parseCheckArgs,
   parseNewRunArgs,
   parsePlanAndExecuteArgs,
@@ -11,6 +12,7 @@ import {
   parseReviewArgs,
   parseSetupArgs,
   parseSquashArgs,
+  parseUsageArgs,
 } from '../src/neal/cli.js';
 import type { AgentConfig } from '../src/neal/types.js';
 
@@ -207,6 +209,36 @@ test('parseSquashArgs rejects unsupported flags and extra arguments', () => {
   assert.throws(() => parseSquashArgs(['squash', 'plans/PLAN.md', 'other.md']), /at most one plan file path/);
 });
 
+test('parseUsageArgs supports current, explicit, latest, all, and json forms', () => {
+  assert.deepEqual(parseUsageArgs(['usage']), { runId: null, json: false, all: false });
+  assert.deepEqual(parseUsageArgs(['usage', '--run', 'latest']), { runId: 'latest', json: false, all: false });
+  assert.deepEqual(parseUsageArgs(['usage', '--run', 'run-1', '--json']), { runId: 'run-1', json: true, all: false });
+  assert.deepEqual(parseUsageArgs(['usage', '--all', '--json']), { runId: null, json: true, all: true });
+});
+
+test('parseUsageArgs rejects ambiguous or malformed selectors', () => {
+  assert.throws(() => parseUsageArgs(['usage', '--all', '--run', 'run-1']), /mutually exclusive/);
+  assert.throws(() => parseUsageArgs(['usage', '--run']), /requires a run id argument/);
+  assert.throws(() => parseUsageArgs(['usage', '--json', '--json']), /accepts --json only once/);
+  assert.throws(() => parseUsageArgs(['usage', '--all', '--all']), /accepts --all only once/);
+  assert.throws(() => parseUsageArgs(['usage', '--run', 'a', '--run', 'b']), /accepts --run only once/);
+  assert.throws(() => parseUsageArgs(['frobnicate']), /Unknown argument: frobnicate/);
+});
+
+test('parseChangesArgs supports current, explicit, latest, and json forms', () => {
+  assert.deepEqual(parseChangesArgs(['changes']), { runId: null, json: false });
+  assert.deepEqual(parseChangesArgs(['changes', '--run', 'latest']), { runId: 'latest', json: false });
+  assert.deepEqual(parseChangesArgs(['changes', '--run', 'run-1', '--json']), { runId: 'run-1', json: true });
+});
+
+test('parseChangesArgs rejects malformed selectors and unsupported flags', () => {
+  assert.throws(() => parseChangesArgs(['changes', '--run']), /requires a run id argument/);
+  assert.throws(() => parseChangesArgs(['changes', '--json', '--json']), /accepts --json only once/);
+  assert.throws(() => parseChangesArgs(['changes', '--run', 'a', '--run', 'b']), /accepts --run only once/);
+  assert.throws(() => parseChangesArgs(['changes', '--all']), /Unknown argument: --all/);
+  assert.throws(() => parseChangesArgs(['frobnicate']), /Unknown argument: frobnicate/);
+});
+
 test('parseResumeArgs accepts public run ids and optional guidance payloads', () => {
   assert.deepEqual(parseResumeArgs(['resume', '--message', 'try the smaller fix']), {
     runId: null,
@@ -366,6 +398,9 @@ test('buildUsageLines teaches only the public command surface by default', () =>
   assert.match(usage, /neal setup/);
   assert.match(usage, /neal status \[--json\] \[--run <run-id>\]/);
   assert.match(usage, /neal status \[--json\] --all/);
+  assert.match(usage, /neal usage \[--json\] \[--run <run-id>\]/);
+  assert.match(usage, /neal usage \[--json\] --all/);
+  assert.match(usage, /neal changes \[--json\] \[--run <run-id>\]/);
   assert.match(usage, /neal version/);
   assert.match(usage, /neal --version/);
   assert.match(usage, /neal -V/);
@@ -381,6 +416,9 @@ test('buildUsageLines teaches only the public command surface by default', () =>
   const messageResumeExample = usageLines.indexOf('  neal resume --run <run-id> --message "Use the narrower helper approach."');
   const statusExample = usageLines.indexOf('  neal status');
   const statusAllExample = usageLines.indexOf('  neal status --all');
+  const usageExample = usageLines.indexOf('  neal usage');
+  const usageAllExample = usageLines.indexOf('  neal usage --all');
+  const changesExample = usageLines.indexOf('  neal changes');
   const interactiveSetupExample = usageLines.indexOf('  neal setup');
   const setupExample = usageLines.indexOf('  neal setup --provider anthropic-claude --all-roles');
   assert.notEqual(setupUsage, -1);
@@ -389,10 +427,14 @@ test('buildUsageLines teaches only the public command surface by default', () =>
   assert.notEqual(messageResumeExample, -1);
   assert.notEqual(statusExample, -1);
   assert.notEqual(statusAllExample, -1);
+  assert.notEqual(usageExample, -1);
+  assert.notEqual(usageAllExample, -1);
+  assert.notEqual(changesExample, -1);
   assert.notEqual(interactiveSetupExample, -1);
   assert.notEqual(setupExample, -1);
   assert.ok(setupUsage < planUsage);
   assert.ok(plainResumeExample < messageResumeExample);
   assert.ok(statusExample < statusAllExample);
+  assert.ok(usageExample < usageAllExample);
   assert.ok(interactiveSetupExample < setupExample);
 });
