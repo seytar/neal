@@ -422,21 +422,6 @@ function ChangesPreview({ data, detail }) {
 
   return (
     <div className="structured-preview">
-      <SourceStrip
-        sources={[
-          {
-            label: 'Run state',
-            path: runStatePath,
-            info: 'Scope base commit, initial base commit and allowed dirty paths are read from RUN_STATE.json.',
-          },
-          {
-            label: 'Git repo',
-            path: data.cwd,
-            info: 'Changes is live-derived from repository Git history and worktree. There is no standalone changes.json file.',
-          },
-        ]}
-      />
-
       <div className="metric-grid">
         <Metric
           label="Changed"
@@ -495,25 +480,8 @@ function UsagePreview({ data, detail }) {
     (sum, provider) => sum + Number(provider.usage?.totalTokens || 0),
     0,
   );
-  const statePath = detail.status.artifacts.runStatePath;
-
   return (
     <div className="structured-preview">
-      <SourceStrip
-        sources={[
-          {
-            label: 'Events',
-            path: data.events.path,
-            info: 'Provider turns, token usage, costs, commands and timing metrics are parsed from events.ndjson.',
-          },
-          {
-            label: 'Run state',
-            path: statePath,
-            info: 'Agent configuration and run identity used to interpret provider-role usage come from RUN_STATE.json.',
-          },
-        ]}
-      />
-
       <div className="metric-grid">
         <Metric
           label="Provider turns"
@@ -587,11 +555,39 @@ function ArtifactPanel({
     : BASE_TABS;
   const isStructured = selectedTab === 'changes' || selectedTab === 'usage';
 
-  let sourcePath = null;
-  let sourceInfo = null;
+  let sources = [];
   if (artifact?.kind === 'markdown') {
-    sourcePath = artifact.path;
-    sourceInfo = 'Physical Markdown artifact read directly from this file.';
+    sources = [{
+      label: 'File',
+      path: artifact.path,
+      info: 'Physical Markdown artifact read directly from this file.',
+    }];
+  } else if (artifact?.kind === 'changes') {
+    sources = [
+      {
+        label: 'Run state',
+        path: detail.status.artifacts.runStatePath,
+        info: 'Scope base commit, initial base commit and allowed dirty paths are read from RUN_STATE.json.',
+      },
+      {
+        label: 'Git repo',
+        path: artifact.data.cwd,
+        info: 'Changes is live-derived from repository Git history and worktree. There is no standalone changes.json file.',
+      },
+    ];
+  } else if (artifact?.kind === 'usage') {
+    sources = [
+      {
+        label: 'Events',
+        path: artifact.data.events.path,
+        info: 'Provider turns, token usage, costs, commands and timing metrics are parsed from events.ndjson.',
+      },
+      {
+        label: 'Run state',
+        path: detail.status.artifacts.runStatePath,
+        info: 'Agent configuration and run identity used to interpret provider-role usage come from RUN_STATE.json.',
+      },
+    ];
   }
 
   return (
@@ -624,22 +620,26 @@ function ArtifactPanel({
           <div className="error-box">{artifact.content}</div>
         ) : viewMode === 'raw' ? (
           <>
-            {sourcePath ? (
-              <SourceStrip sources={[{ label: 'File', path: sourcePath, info: sourceInfo }]} />
-            ) : null}
+            {sources.length ? <SourceStrip sources={sources} /> : null}
             <pre>{artifact?.kind === 'markdown'
               ? artifact.content
               : JSON.stringify(artifact?.data ?? {}, null, 2)}</pre>
           </>
         ) : artifact?.kind === 'markdown' ? (
           <>
-            <SourceStrip sources={[{ label: 'File', path: sourcePath, info: sourceInfo }]} />
+            {sources.length ? <SourceStrip sources={sources} /> : null}
             <MarkdownPreview content={artifact.content} />
           </>
         ) : artifact?.kind === 'changes' ? (
-          <ChangesPreview data={artifact.data} detail={detail} />
+          <>
+            {sources.length ? <SourceStrip sources={sources} /> : null}
+            <ChangesPreview data={artifact.data} detail={detail} />
+          </>
         ) : artifact?.kind === 'usage' ? (
-          <UsagePreview data={artifact.data} detail={detail} />
+          <>
+            {sources.length ? <SourceStrip sources={sources} /> : null}
+            <UsagePreview data={artifact.data} detail={detail} />
+          </>
         ) : null}
       </section>
     </>
