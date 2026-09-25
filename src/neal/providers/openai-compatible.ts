@@ -1598,6 +1598,8 @@ class OpenAICompatibleCoderAdapter implements CoderAdapter {
       args.toolPolicy?.allowRun === false ? createPlanAuthorToolset : createCoderToolset;
     state.tools = createToolset(args.cwd, {
       allowedWritePaths: args.toolPolicy?.allowedWritePaths,
+      allowRun: args.toolPolicy?.allowRun,
+      allowedRunCommands: args.toolPolicy?.allowedRunCommands,
       emitToolEvent: (event) =>
         forwardAgentToolEvent(event, {
           role: 'coder',
