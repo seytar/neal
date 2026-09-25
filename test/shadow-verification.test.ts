@@ -5,6 +5,7 @@ import {
   extractShadowVerificationCommands,
   isSafeShadowVerificationCommand,
 } from '../src/neal/shadow-verification.js';
+import { buildReviewerPrompt } from '../src/neal/prompts/execute.js';
 
 test('Shadow verification accepts bounded checks and rejects runtime or mutating commands', () => {
   assert.equal(isSafeShadowVerificationCommand('php -l app/Foo.php'), true);
@@ -60,4 +61,33 @@ test('Shadow verification falls back to a one-shot plan body when no numbered sc
   ].join('\n');
 
   assert.deepEqual(extractShadowVerificationCommands(plan, 1), ['cargo check', 'cargo test']);
+});
+
+test('scope reviewer defers private runtime evidence in Shadow mode', () => {
+  const prompt = buildReviewerPrompt({
+    planDoc: 'PLAN.md',
+    baseCommit: '1111111',
+    headCommit: '2222222',
+    commits: ['2222222'],
+    diffStat: '1 file changed',
+    changedFiles: ['src/example.ts'],
+    round: 1,
+    reviewMarkdownPath: '.neal/runs/test/REVIEW.md',
+    parentScopeLabel: '1',
+    progressJustification: {
+      milestoneTargeted: 'implement change',
+      newEvidence: 'code changed',
+      whyNotRedundant: 'first pass',
+      nextStepUnlocked: 'review',
+    },
+    recentHistorySummary: '(none)',
+    scratchDir: '.neal/runs/test/reviewer-scratch',
+    executionProfile: 'shadow',
+    accessMode: 'read-only',
+  });
+
+  assert.match(prompt, /private\/live runtime validation as a later explicit gate/);
+  assert.match(prompt, /not by itself a blocking finding/);
+  assert.match(prompt, /Do not require the coder to open a manual gate solely/);
+  assert.match(prompt, /Do not use meaningfulProgressAction=block_for_operator solely/);
 });
