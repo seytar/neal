@@ -60,8 +60,10 @@ function StatusPill({ lane }) {
 function RunList({ runs, selectedRunId, onSelect }) {
   return (
     <aside className="sidebar">
-      <div className="brand">Neal Control Center</div>
-      <div className="subtitle">State machine visual controller</div>
+      <div className="brand-row">
+        <div className="brand">neal</div>
+        <span className="brand-tag">control</span>
+      </div>
 
       <div className="run-list">
         {runs.length === 0 ? (
@@ -73,12 +75,14 @@ function RunList({ runs, selectedRunId, onSelect }) {
             key={run.runId}
             onClick={() => onSelect(run.runId)}
           >
-            <div className="run-title">{basename(run.planDoc)}</div>
-            <div className="run-row">
+            <div className="run-head">
+              <div className="run-title">{basename(run.planDoc)}</div>
               <StatusPill lane={run.uiLane} />
-              <span className="muted">scope {run.currentScopeNumber}</span>
             </div>
-            <div className="run-phase">{run.publicPhase}</div>
+            <div className="run-meta-line">
+              <span>S{run.currentScopeNumber}</span>
+              <span>{run.publicPhase}</span>
+            </div>
           </button>
         ))}
       </div>
@@ -307,28 +311,27 @@ function RunFacts({ detail }) {
   const config = status.build?.agentConfig || {};
 
   return (
-    <section className="card">
-      <h2>Run</h2>
-      <dl className="facts">
-        <dt>Status</dt><dd>{status.publicStatus}</dd>
-        <dt>Step</dt><dd>{status.publicPhase}</dd>
-        <dt>Scope</dt><dd>{status.currentScopeNumber}</dd>
-        <dt>Health</dt><dd>{status.health?.classification} · {status.health?.reason}</dd>
-        <dt>Findings</dt>
-        <dd>
-          {status.findings?.openBlocking} blocking, {status.findings?.openNonBlocking} non-blocking
-        </dd>
-      </dl>
-
-      <h2 className="section-heading">Models</h2>
-      <div className="model-list">
-        <div><span>Planner</span><strong>{modelLabel(config.planner)}</strong></div>
-        <div><span>Coder</span><strong>{modelLabel(config.coder)}</strong></div>
-        <div><span>Reviewer</span><strong>{modelLabel(config.reviewer)}</strong></div>
+    <section className="card run-facts">
+      <div className="fact-strip">
+        <div><span>Status</span><strong>{status.publicStatus}</strong></div>
+        <div><span>Step</span><strong>{status.publicPhase}</strong></div>
+        <div><span>Scope</span><strong>{status.currentScopeNumber}</strong></div>
+        <div>
+          <span>Findings</span>
+          <strong>{status.findings?.openBlocking} / {status.findings?.openNonBlocking}</strong>
+        </div>
       </div>
 
-      <h2 className="section-heading">Next action</h2>
-      <p className="body-copy">{status.nextAction}</p>
+      <div className="model-compact">
+        <div><span>P</span><strong>{modelLabel(config.planner)}</strong></div>
+        <div><span>C</span><strong>{modelLabel(config.coder)}</strong></div>
+        <div><span>R</span><strong>{modelLabel(config.reviewer)}</strong></div>
+      </div>
+
+      <div className="next-compact">
+        <span>Next</span>
+        <p>{status.nextAction}</p>
+      </div>
     </section>
   );
 }
@@ -518,9 +521,9 @@ function App() {
         ) : (
           <>
             <header className="topbar">
-              <div>
+              <div className="title-line">
                 <h1>{basename(detail.status.planDoc)}</h1>
-                <div className="subtitle">{detail.status.runId}</div>
+                <span className="run-id">{detail.status.runId}</span>
               </div>
               <StatusPill lane={detail.uiLane} />
             </header>
