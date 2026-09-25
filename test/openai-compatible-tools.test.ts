@@ -228,6 +228,22 @@ describe('coder tool layer', () => {
     assert.doesNotMatch(result, /should-not-run/);
   });
 
+  it('run can be restricted to an exact verification command allowlist', async () => {
+    const scopedTools = createCoderToolset(rootDir, {
+      allowRun: true,
+      allowedRunCommands: ['printf allowed'],
+      runTimeoutMs: 500,
+    });
+
+    const allowed = await callTool(scopedTools.run, { command: '  printf allowed  ' });
+    assert.ok(!isToolErrorResult(allowed), allowed);
+    assert.match(allowed, /stdout:\nallowed/);
+
+    const denied = await callTool(scopedTools.run, { command: 'printf denied' });
+    assert.ok(isToolErrorResult(denied), denied);
+    assert.match(denied, /not in the Neal-approved verification allowlist/);
+  });
+
   it('list_dir marks directories with a trailing slash', async () => {
     await fs.mkdir(path.join(rootDir, 'listing', 'sub'), { recursive: true });
     await fs.writeFile(path.join(rootDir, 'listing', 'plain.txt'), 'x');
