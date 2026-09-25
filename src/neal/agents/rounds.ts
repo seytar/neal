@@ -17,6 +17,7 @@ import type { StructuredJsonProtocolSpec } from '../providers/types.js';
 import {
   applyExecutionProfilePrompt,
   applyReviewerExecutionProfilePrompt,
+  applyShadowCompletionSummaryPrompt,
   getExecutionCoderToolPolicy,
 } from '../shadow-mode.js';
 import type {
@@ -530,7 +531,10 @@ export async function runCoderFinalCompletionSummaryRound(args: {
         advisor.runStructuredRound<FinalCompletionSummary>({
           label: 'final-completion',
           cwd: args.cwd,
-          prompt: buildFinalCompletionSummaryPrompt(args),
+          prompt: applyShadowCompletionSummaryPrompt(
+            buildFinalCompletionSummaryPrompt(args),
+            args.packet.executionProfile ?? 'normal',
+          ),
           schema,
           structuredJsonProtocol: buildStructuredJsonProtocolSpec({
             schemaLabel: 'final_completion_summary_payload',
