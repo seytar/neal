@@ -67,6 +67,27 @@ export function applyExecutionProfilePrompt(
 }
 
 
+
+export function applyReviewerExecutionProfilePrompt(
+  prompt: string,
+  executionProfile: ExecutionProfile,
+): string {
+  if (executionProfile !== 'shadow') {
+    return prompt;
+  }
+
+  return [
+    prompt,
+    '',
+    'Shadow review constraints:',
+    '- Shadow mode is active. Review the implementation statically and use any verification evidence that actually exists, but treat private/live runtime validation as a later explicit gate.',
+    '- The absence of evidence that requires a private dependency tree, live application server, credentials, database, external store, network access, or other unavailable runtime state is not by itself a blocking finding in this scope review.',
+    '- Do not require the coder to open a manual gate solely to obtain private/live runtime evidence. If the implementation is statically correct, leave that evidence for Shadow private validation after static acceptance.',
+    '- Static correctness defects, missing implementation, unsafe code, and verification tooling or test gaps that are visible in the repository remain ordinary review findings and may still block.',
+    '- Do not use meaningfulProgressAction=block_for_operator solely because private/live runtime evidence is pending.',
+  ].join('\n');
+}
+
 export function reopenShadowRunFromPrivateFeedback(
   state: OrchestrationState,
   feedback: string,
