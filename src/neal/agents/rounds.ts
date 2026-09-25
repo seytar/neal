@@ -328,6 +328,7 @@ export async function runReviewerRound(args: {
   // Earlier accepted scopes' per-file diffs for files the current diff touches
   // again; threaded into buildReviewerPrompt.
   earlierScopeChanges?: readonly EarlierScopeFileChange[] | null;
+  executionProfile?: ExecutionProfile;
   logger?: RunLogger;
 }): Promise<{
   sessionHandle: string | null;
