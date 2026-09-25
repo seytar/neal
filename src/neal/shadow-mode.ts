@@ -1,23 +1,62 @@
 import { createNextScopeEntryReset } from './orchestrator/transitions.js';
 import type { CoderRunPromptArgs } from './providers/types.js';
 import { shouldAdvanceTopLevelScopeNumber } from './scopes.js';
-import type { ExecutionProfile, OrchestrationState } from './types.js';
+import type { ExecutionProfile, OrchestrationState, ShadowExecutionPolicy } from './types.js';
 
 export function getExecutionCoderToolPolicy(
   executionProfile: ExecutionProfile,
+  shadowExecutionPolicy: ShadowExecutionPolicy = 'strict',
+  allowedVerificationCommands: readonly string[] = [],
 ): CoderRunPromptArgs['toolPolicy'] | undefined {
-  return executionProfile === 'shadow' ? { allowRun: false } : undefined;
+  if (executionProfile !== 'shadow') {
+    return undefined;
+  }
+
+  if (shadowExecutionPolicy === 'verify' && allowedVerificationCommands.length > 0) {
+    return {
+      allowRun: true,
+      allowedRunCommands: [...allowedVerificationCommands],
+    };
+  }
+
+  return { allowRun: false };
 }
 
-export function applyExecutionProfilePrompt(prompt: string, executionProfile: ExecutionProfile): string {
+export function applyExecutionProfilePrompt(
+  prompt: string,
+  executionProfile: ExecutionProfile,
+  shadowExecutionPolicy: ShadowExecutionPolicy = 'strict',
+  allowedVerificationCommands: readonly string[] = [],
+): string {
   if (executionProfile !== 'shadow') {
     return prompt;
+  }
+
+  if (shadowExecutionPolicy === 'verify') {
+    const commandLines = allowedVerificationCommands.length > 0
+      ? [
+          '- You may run only these Neal-approved current-scope verification commands, exactly as written:',
+          ...allowedVerificationCommands.map((command) => `  - \`${command}\``),
+        ]
+      : ['- No current-scope verification command was approved, so shell/command execution remains unavailable.'];
+
+    return [
+      prompt,
+      '',
+      'Shadow mode constraints (verify policy):',
+      '- Arbitrary shell execution is mechanically restricted. You may inspect and edit files in the checkout using the normal jailed tools.',
+      ...commandLines,
+      '- Do not start applications, servers, watchers, containers, migrations, deploys, network probes, or other live/runtime services.',
+      '- Do not claim private runtime verification passed. Distinguish any local verification that actually ran from private/live validation that did not.',
+      '- Missing private runtime evidence is expected in Shadow mode and is not, by itself, a blocker to completing the static implementation.',
+      '- Do not create a manual gate solely because private/live runtime evidence is unavailable in the Shadow checkout; that evidence belongs to the later private-validation gate.',
+    ].join('\n');
   }
 
   return [
     prompt,
     '',
-    'Shadow mode constraints:',
+    'Shadow mode constraints (strict policy):',
     '- Shell/command execution is mechanically disabled for this turn.',
     '- You may inspect and edit files in the checkout using non-shell tools.',
     '- Do not run or claim to have run tests, builds, linters, migrations, executables, services, or runtime checks.',
