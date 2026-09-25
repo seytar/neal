@@ -88,8 +88,9 @@ There are two operator transitions:
 - `neal shadow feedback --file <sanitized-file>` records the supplied sanitized
   diagnostic as a run-local feedback artifact, reopens the same run at
   `coder_scope`, and reuses the existing `continue_execution` semantics for
-  corrective work. The run remains Shadow-profiled, so coder shell execution
-  stays disabled on every corrective turn.
+  corrective work. The run remains Shadow-profiled and keeps its persisted
+  command policy: verify stays bounded to the active scope's approved
+  verification commands, while strict stays command-disabled.
 - `neal shadow accept --note "..."` is valid only from the private-validation
   wait. It records the acceptance timestamp/note and moves the run to
   `phase: done`, `status: done`.
