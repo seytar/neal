@@ -937,31 +937,69 @@ function ActionPanel({
   }
 
   if (status.manualGate) {
+    const failure = status.manualGate.lastFailure;
     return (
-      <section className="card attention">
+      <section className="card attention manual-gate-card">
         <div className="eyebrow">Manual gate</div>
         <h2>{status.manualGate.title}</h2>
-        <p className="body-copy">{status.manualGate.reason}</p>
 
-        {status.manualGate.lastFailure ? (
-          <div className="error-box">
-            Last check failed: {status.manualGate.lastFailure.checkName}
+        <div className="manual-gate-summary">
+          <strong>No text input is required here.</strong>
+          <span>
+            Complete the required work outside Neal, then run the gate checks. If all checks pass,
+            Neal continues automatically.
+          </span>
+        </div>
+
+        <div className="manual-gate-steps">
+          <div><span>1</span><strong>Read the instructions below.</strong></div>
+          <div><span>2</span><strong>Do the required manual/private work.</strong></div>
+          <div><span>3</span><strong>Run the gate checks.</strong></div>
+        </div>
+
+        {failure ? (
+          <div className="manual-gate-failure">
+            <div className="error-box">
+              Last check failed: {failure.checkName}
+              {failure.exitCode !== null ? ' · exit ' + failure.exitCode : ''}
+              {failure.signal ? ' · ' + failure.signal : ''}
+            </div>
+            {(failure.stdoutTail || failure.stderrTail) ? (
+              <details className="manual-gate-output">
+                <summary>Show failed check output</summary>
+                {failure.stdoutTail ? (
+                  <>
+                    <span>stdout</span>
+                    <pre>{failure.stdoutTail}</pre>
+                  </>
+                ) : null}
+                {failure.stderrTail ? (
+                  <>
+                    <span>stderr</span>
+                    <pre>{failure.stderrTail}</pre>
+                  </>
+                ) : null}
+              </details>
+            ) : null}
           </div>
         ) : null}
 
-        <ReviewShortcuts onArtifactTab={onArtifactTab} />
+        <details className="manual-gate-why">
+          <summary>Why Neal stopped</summary>
+          <p className="body-copy">{status.manualGate.reason}</p>
+        </details>
 
         <CommandLine command={status.manualGate.resumeCommand} label="Will run" />
         <div className="actions">
+          <ActionButton onClick={() => onArtifactTab('manual-gate')}>
+            View instructions
+          </ActionButton>
           <ActionButton
             kind="primary"
             disabled={runningAction}
             onClick={() => onAction('resume')}
           >
-            Check again & continue
-          </ActionButton>
-          <ActionButton onClick={() => onArtifactTab('manual-gate')}>
-            View instructions
+            Run gate checks
           </ActionButton>
         </div>
       </section>
@@ -1640,6 +1678,13 @@ function App() {
       void loadArtifact(selectedTab);
     }
   }, [selectedRunId, selectedTab, loadArtifact]);
+
+  useEffect(() => {
+    if (detail?.status?.manualGate) {
+      setSelectedTab('manual-gate');
+      setArtifactViewMode('preview');
+    }
+  }, [selectedRunId, detail?.status?.manualGate?.id]);
 
   useEffect(() => {
     const resultRunId = detail?.action?.status === 'succeeded'
