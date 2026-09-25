@@ -2,17 +2,26 @@ import { readFile } from 'node:fs/promises';
 
 import { getCurrentExecutionScopeDescriptor } from './scopes.js';
 import type { OrchestrationState } from './types.js';
-import { isVerificationCommand } from './verification-events.js';
 
 const MAX_VERIFICATION_COMMAND_CHARS = 1000;
 const SHELL_CONTROL_PATTERN = /[\n\r;&|<>]|\$\(|\$\{|\x60/;
 const SHELL_WRAPPER_PATTERN = /^(?:ba|z|fi|da)?sh\b|^cmd(?:\.exe)?\s+\/c\b|^powershell(?:\.exe)?\b|^pwsh\b/i;
 const MUTATING_OR_RUNTIME_PATTERN =
   /\b(?:serve|server|start|dev|watch|migrate|migration|seed|deploy|publish|install|update|upgrade|docker|compose|kubectl|helm|curl|wget|ssh|scp|rsync|nc|netcat|sudo|su|rm|mv|cp|chmod|chown|kill|pkill|reboot|shutdown)\b/i;
-const KNOWN_VERIFICATION_RUNNER_PATTERN =
-  /(?:^|[\\/])(?:phpunit|pest|pytest|vitest|jest|eslint|biome|ruff|mypy|golangci-lint)(?:\s|$)|\b(?:cargo|go|pnpm|npm|yarn|bun|gradle|gradlew|mvn|dotnet)\s+(?:run\s+)?(?:test|tests|check|lint|typecheck|build|verify|validation)\b/i;
+const DIRECT_VERIFICATION_RUNNER_PATTERN =
+  /^(?:\.\/)?(?:vendor\/bin\/)?(?:phpunit|pest|pytest|vitest|jest|eslint|mypy|phpstan|psalm|golangci-lint)(?:\s|$)/i;
+const BIOME_OR_RUFF_PATTERN = /^(?:biome|ruff)\s+(?:check|lint|format)(?:\s|$)/i;
+const PACKAGE_MANAGER_PATTERN =
+  /^(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?(?:test|tests|check|lint|typecheck|build|verify|validation)(?:\s|$)/i;
+const CARGO_PATTERN = /^cargo\s+(?:test|check|clippy|build|fmt)(?:\s|$)/i;
+const GO_PATTERN = /^go\s+(?:test|vet|build)(?:\s|$)/i;
+const JVM_OR_DOTNET_PATTERN =
+  /^(?:(?:\.\/)?gradlew|gradle|mvn|dotnet)\s+(?:test|check|build|verify)(?:\s|$)/i;
+const PYTHON_PYTEST_PATTERN = /^(?:python|python3)\s+-m\s+pytest(?:\s|$)/i;
 const PHP_LINT_PATTERN = /^php\s+-l\s+\S+/i;
-const ARTISAN_ROUTE_LIST_PATTERN = /^php\s+artisan\s+route:list(?:\s|$)/i;
+const PHP_TEST_SCRIPT_PATTERN = /^php\s+tests?\/[A-Za-z0-9_./-]+\.php(?:\s|$)/i;
+const PHP_VENDOR_TEST_PATTERN = /^php\s+vendor\/bin\/(?:phpunit|pest)(?:\s|$)/i;
+const ARTISAN_VERIFICATION_PATTERN = /^php\s+artisan\s+(?:test|route:list)(?:\s|$)/i;
 
 export function isSafeShadowVerificationCommand(command: string) {
   const normalized = command.trim();
@@ -27,10 +36,17 @@ export function isSafeShadowVerificationCommand(command: string) {
   }
 
   return (
-    isVerificationCommand(normalized) ||
-    KNOWN_VERIFICATION_RUNNER_PATTERN.test(normalized) ||
+    DIRECT_VERIFICATION_RUNNER_PATTERN.test(normalized) ||
+    BIOME_OR_RUFF_PATTERN.test(normalized) ||
+    PACKAGE_MANAGER_PATTERN.test(normalized) ||
+    CARGO_PATTERN.test(normalized) ||
+    GO_PATTERN.test(normalized) ||
+    JVM_OR_DOTNET_PATTERN.test(normalized) ||
+    PYTHON_PYTEST_PATTERN.test(normalized) ||
     PHP_LINT_PATTERN.test(normalized) ||
-    ARTISAN_ROUTE_LIST_PATTERN.test(normalized)
+    PHP_TEST_SCRIPT_PATTERN.test(normalized) ||
+    PHP_VENDOR_TEST_PATTERN.test(normalized) ||
+    ARTISAN_VERIFICATION_PATTERN.test(normalized)
   );
 }
 
