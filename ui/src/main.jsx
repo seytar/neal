@@ -164,6 +164,396 @@ function CommandsPanel({ catalog, open, onClose }) {
   );
 }
 
+
+function configSourceLabel(source) {
+  if (!source) return 'unknown';
+  if (source.kind === 'repo') return 'repo';
+  if (source.kind === 'user') return 'user';
+  if (source.kind === 'environment') return 'env';
+  if (source.kind === 'inherited') return 'inherited';
+  return 'default';
+}
+
+function ConfigSourceBadge({ source }) {
+  if (!source) return null;
+  const detail = source.note || (source.path ? source.path + ' · ' + source.key : source.key);
+  return (
+    <span className={'config-source ' + source.kind} title={detail}>
+      {configSourceLabel(source)}
+    </span>
+  );
+}
+
+function configDraftFromSnapshot(config) {
+  if (!config) return null;
+  return {
+    planner: {
+      provider: config.roles.planner.provider || '',
+      model: config.roles.planner.model || '',
+      effort: config.roles.planner.effort || '',
+    },
+    coder: {
+      provider: config.roles.coder.provider || '',
+      model: config.roles.coder.model || '',
+      effort: config.roles.coder.effort || '',
+    },
+    reviewer: {
+      provider: config.roles.reviewer.provider || '',
+      model: config.roles.reviewer.model || '',
+      effort: config.roles.reviewer.effort || '',
+    },
+    reviewLevel: config.runtime.review_level.value || 'moderate',
+    openaiCompatible: {
+      baseUrl: config.openaiCompatible.baseUrl || '',
+      apiKeyEnv: config.openaiCompatible.apiKeyEnv || '',
+      defaultModel: config.openaiCompatible.defaultModel || '',
+      structuredOutputMode: config.openaiCompatible.structuredOutputMode || '',
+    },
+  };
+}
+
+function configChanges(config, draft) {
+  if (!config || !draft) return {};
+  const changes = {};
+
+  for (const role of ['planner', 'coder', 'reviewer']) {
+    const current = config.roles[role];
+    if (draft[role].provider !== (current.provider || '')) {
+      changes['agent.' + role + '.provider'] = draft[role].provider || null;
+    }
+    if (draft[role].model !== (current.model || '')) {
+      changes['agent.' + role + '.model'] = draft[role].model || null;
+    }
+    if (draft[role].effort !== (current.effort || '')) {
+      changes['agent.' + role + '.effort'] = draft[role].effort || null;
+    }
+  }
+
+  if (draft.reviewLevel !== config.runtime.review_level.value) {
+    changes['neal.review_level'] = draft.reviewLevel;
+  }
+
+  const openai = config.openaiCompatible;
+  if (draft.openaiCompatible.baseUrl !== (openai.baseUrl || '')) {
+    changes['providers.openai_compatible.base_url'] = draft.openaiCompatible.baseUrl || null;
+  }
+  if (draft.openaiCompatible.apiKeyEnv !== (openai.apiKeyEnv || '')) {
+    changes['providers.openai_compatible.api_key_env'] = draft.openaiCompatible.apiKeyEnv || null;
+  }
+  if (draft.openaiCompatible.defaultModel !== (openai.defaultModel || '')) {
+    changes['providers.openai_compatible.default_model'] = draft.openaiCompatible.defaultModel || null;
+  }
+  if (draft.openaiCompatible.structuredOutputMode !== (openai.structuredOutputMode || '')) {
+    changes['providers.openai_compatible.structured_output_mode'] =
+      draft.openaiCompatible.structuredOutputMode || null;
+  }
+
+  return changes;
+}
+
+function ConfigField({ label, source, children, hint }) {
+  return (
+    <label className="config-field">
+      <span className="config-field-head">
+        <span>{label}</span>
+        <ConfigSourceBadge source={source} />
+      </span>
+      {children}
+      {hint ? <small>{hint}</small> : null}
+    </label>
+  );
+}
+
+function RoleConfigCard({ role, config, draft, setDraft }) {
+  const roleConfig = config.roles[role];
+  const provider = draft[role].provider;
+  const effortOptions = config.providerEfforts[provider] || [];
+  const roleOptions = config.roleOptions[role] || [];
+
+  function setField(field, value) {
+    setDraft((current) => ({
+      ...current,
+      [role]: { ...current[role], [field]: value },
+    }));
+  }
+
+  return (
+    <section className="config-role-card">
+      <div className="config-role-head">
+        <strong>{role}</strong>
+        <span>{modelLabel(roleConfig)}</span>
+      </div>
+
+      <ConfigField label="Provider" source={roleConfig.sources.provider}>
+        <select value={provider} onChange={(event) => setField('provider', event.target.value)}>
+          {role === 'planner' ? <option value="">inherit coder</option> : null}
+          {roleOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </ConfigField>
+
+      <ConfigField
+        label="Model"
+        source={roleConfig.sources.model}
+        hint="Blank means provider default."
+      >
+        <input
+          className="text-input"
+          value={draft[role].model}
+          onChange={(event) => setField('model', event.target.value)}
+          placeholder="provider default"
+        />
+      </ConfigField>
+
+      <ConfigField
+        label="Effort"
+        source={roleConfig.sources.effort}
+        hint={effortOptions.length ? 'Provider-supported reasoning depth.' : 'This provider has no configurable effort.'}
+      >
+        <select
+          value={draft[role].effort}
+          onChange={(event) => setField('effort', event.target.value)}
+          disabled={effortOptions.length === 0}
+        >
+          <option value="">provider default</option>
+          {effortOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </ConfigField>
+    </section>
+  );
+}
+
+function ConfigPanel({ open, onClose, config, loading, onReload }) {
+  const [target, setTarget] = useState('user');
+  const [draft, setDraft] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setDraft(configDraftFromSnapshot(config));
+    setSaveError(null);
+    setSaved(false);
+  }, [config]);
+
+  if (!open) return null;
+
+  const changes = configChanges(config, draft);
+  const changeCount = Object.keys(changes).length;
+
+  async function save() {
+    if (!changeCount) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaved(false);
+    try {
+      await api('/api/config', {
+        method: 'POST',
+        body: JSON.stringify({ target, changes }),
+      });
+      await onReload();
+      setSaved(true);
+    } catch (error) {
+      setSaveError(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="commands-backdrop" onClick={onClose}>
+      <aside className="config-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="commands-head">
+          <div>
+            <strong>Neal config</strong>
+            <span>effective values + sources</span>
+          </div>
+          <button type="button" className="panel-close" onClick={onClose}>×</button>
+        </div>
+
+        {loading || !config || !draft ? (
+          <div className="empty-inline">Loading config…</div>
+        ) : (
+          <>
+            <SourceStrip
+              sources={[
+                {
+                  label: config.sources.repo.exists ? 'Repo config' : 'Repo config · missing',
+                  path: config.sources.repo.path,
+                  info: 'Highest-precedence project config. Values here override the user config.',
+                },
+                {
+                  label: config.sources.user.exists ? 'User config' : 'User config · missing',
+                  path: config.sources.user.path,
+                  info: 'User-level config written by neal setup. Repo neal.yml wins when both define the same key.',
+                },
+              ]}
+            />
+
+            <div className="config-precedence">
+              precedence: repo <strong>›</strong> user <strong>›</strong> built-in defaults
+            </div>
+
+            <section className="config-section">
+              <div className="config-section-title">Agents</div>
+              <div className="config-role-grid">
+                {['planner', 'coder', 'reviewer'].map((role) => (
+                  <RoleConfigCard
+                    key={role}
+                    role={role}
+                    config={config}
+                    draft={draft}
+                    setDraft={setDraft}
+                  />
+                ))}
+              </div>
+            </section>
+
+            <section className="config-section">
+              <div className="config-section-title">Review</div>
+              <ConfigField label="Review level" source={config.runtime.review_level.source}>
+                <select
+                  value={draft.reviewLevel}
+                  onChange={(event) => setDraft((current) => ({ ...current, reviewLevel: event.target.value }))}
+                >
+                  <option value="strict">strict</option>
+                  <option value="moderate">moderate</option>
+                  <option value="lenient">lenient</option>
+                </select>
+              </ConfigField>
+            </section>
+
+            <section className="config-section">
+              <div className="config-section-head">
+                <div className="config-section-title">OpenAI-compatible</div>
+                <span className={'readiness ' + (config.openaiCompatible.apiKeyConfigured ? 'ok' : 'missing')}>
+                  {config.openaiCompatible.apiKeyConfigured ? 'API key configured' : 'API key missing'}
+                </span>
+              </div>
+
+              <div className="config-readiness-line">
+                <span>Credential env</span>
+                <code>{config.openaiCompatible.apiKeyEnv}</code>
+                <ConfigSourceBadge source={config.openaiCompatible.sources.apiKeyEnv} />
+              </div>
+              <div className="config-secret-note">
+                Secret values are never returned to the browser or written by this panel. Set <code>{config.openaiCompatible.apiKeyEnv}</code> in the Neal process environment or project <code>.env</code>.
+              </div>
+
+              <div className="config-two-col">
+                <ConfigField label="Base URL" source={config.openaiCompatible.sources.baseUrl}>
+                  <input
+                    className="text-input"
+                    value={draft.openaiCompatible.baseUrl}
+                    onChange={(event) => setDraft((current) => ({
+                      ...current,
+                      openaiCompatible: { ...current.openaiCompatible, baseUrl: event.target.value },
+                    }))}
+                    placeholder="https://api.example.com/v1"
+                  />
+                </ConfigField>
+                <ConfigField label="API key env" source={config.openaiCompatible.sources.apiKeyEnv}>
+                  <input
+                    className="text-input"
+                    value={draft.openaiCompatible.apiKeyEnv}
+                    onChange={(event) => setDraft((current) => ({
+                      ...current,
+                      openaiCompatible: { ...current.openaiCompatible, apiKeyEnv: event.target.value },
+                    }))}
+                  />
+                </ConfigField>
+                <ConfigField label="Default model" source={config.openaiCompatible.sources.defaultModel}>
+                  <input
+                    className="text-input"
+                    value={draft.openaiCompatible.defaultModel}
+                    onChange={(event) => setDraft((current) => ({
+                      ...current,
+                      openaiCompatible: { ...current.openaiCompatible, defaultModel: event.target.value },
+                    }))}
+                    placeholder="optional"
+                  />
+                </ConfigField>
+                <ConfigField label="Structured output" source={config.openaiCompatible.sources.structuredOutputMode}>
+                  <select
+                    value={draft.openaiCompatible.structuredOutputMode}
+                    onChange={(event) => setDraft((current) => ({
+                      ...current,
+                      openaiCompatible: { ...current.openaiCompatible, structuredOutputMode: event.target.value },
+                    }))}
+                  >
+                    <option value="">adapter default</option>
+                    <option value="json_schema">json_schema</option>
+                    <option value="json_object">json_object</option>
+                  </select>
+                </ConfigField>
+              </div>
+            </section>
+
+            <details className="config-advanced">
+              <summary>Advanced Neal runtime</summary>
+              <div className="runtime-grid">
+                {Object.entries(config.runtime)
+                  .filter(([key]) => key !== 'review_level')
+                  .map(([key, item]) => (
+                    <div className="runtime-row" key={key}>
+                      <code>{key}</code>
+                      <strong>{String(item.value)}</strong>
+                      <ConfigSourceBadge source={item.source} />
+                    </div>
+                  ))}
+              </div>
+            </details>
+
+            <div className="config-save-bar">
+              <div className="config-target">
+                <span>Save to</span>
+                <div className="mode-buttons">
+                  <button
+                    type="button"
+                    className={target === 'repo' ? 'active' : ''}
+                    onClick={() => setTarget('repo')}
+                  >
+                    Repo
+                  </button>
+                  <button
+                    type="button"
+                    className={target === 'user' ? 'active' : ''}
+                    onClick={() => setTarget('user')}
+                  >
+                    User
+                  </button>
+                </div>
+              </div>
+
+              <div className="config-save-actions">
+                {saved ? <span className="save-ok">saved</span> : null}
+                <span>{changeCount} change{changeCount === 1 ? '' : 's'}</span>
+                <button
+                  type="button"
+                  className="button primary"
+                  disabled={!changeCount || saving}
+                  onClick={save}
+                >
+                  {saving ? 'Saving…' : 'Save config'}
+                </button>
+              </div>
+            </div>
+
+            {target === 'user' && Object.values(config.roles).some((role) =>
+              Object.values(role.sources).some((source) => source.kind === 'repo')
+            ) ? (
+              <div className="notice">
+                Some effective agent values come from repo <code>neal.yml</code>. Saving the same keys to User config will not override those repo values.
+              </div>
+            ) : null}
+
+            {saveError ? <div className="error-box">{saveError}</div> : null}
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
 function TerminalStatusLine({ line, loading }) {
   return (
     <div className="terminal-status-line" title={line || ''}>
