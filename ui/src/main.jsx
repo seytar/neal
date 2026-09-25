@@ -727,6 +727,7 @@ function NewRunModal({
 
         <div className="new-run-note">
           Neal will create the seed Markdown under <code>.neal/ui-plans/</code>, then refine it in place.
+          Your task text is kept as entered, and user-facing planning and operator questions are asked to preserve that language.
         </div>
 
         {action?.command ? (
@@ -822,6 +823,23 @@ function ActionButton({ children, onClick, kind = 'default', disabled = false })
   );
 }
 
+function ReviewShortcuts({ onArtifactTab }) {
+  return (
+    <div className="review-shortcuts">
+      <div className="review-shortcuts-copy">
+        <strong>Review before acting</strong>
+        <span>Start with Review. Use Progress for current work, Changes for touched files, and Plan for intended scope.</span>
+      </div>
+      <div className="actions">
+        <ActionButton kind="primary" onClick={() => onArtifactTab('review')}>Open review</ActionButton>
+        <ActionButton onClick={() => onArtifactTab('progress')}>Progress</ActionButton>
+        <ActionButton onClick={() => onArtifactTab('changes')}>Changes</ActionButton>
+        <ActionButton onClick={() => onArtifactTab('plan')}>Plan</ActionButton>
+      </div>
+    </div>
+  );
+}
+
 function ActionPanel({
   detail,
   guidance,
@@ -862,6 +880,8 @@ function ActionPanel({
           Static implementation and review are complete. Apply or map the changes
           to the private project and run the real build, tests and runtime checks.
         </p>
+
+        <ReviewShortcuts onArtifactTab={onArtifactTab} />
 
         <label className="field-label" htmlFor="validation-note">Pass note</label>
         <input
@@ -929,6 +949,8 @@ function ActionPanel({
           </div>
         ) : null}
 
+        <ReviewShortcuts onArtifactTab={onArtifactTab} />
+
         <CommandLine command={status.manualGate.resumeCommand} label="Will run" />
         <div className="actions">
           <ActionButton
@@ -957,6 +979,8 @@ function ActionPanel({
         </p>
 
         {blocked?.reason ? <div className="notice">{blocked.reason}</div> : null}
+
+        <ReviewShortcuts onArtifactTab={onArtifactTab} />
 
         {detail.guidanceOptions?.length ? (
           <div className="option-list">
