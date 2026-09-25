@@ -281,6 +281,9 @@ The first version focuses on daily writer-run control:
 - manual-gate instructions and re-check/resume
 - Shadow private-validation pass/fail controls
 - plan, progress, review, recovery, narrative, changes, and usage views
+- rendered Markdown previews with a Preview/Raw switch
+- structured Changes and Usage inspectors with Raw JSON fallback
+- physical source paths and source explanations for displayed run/artifact data
 
 The server binds only to the loopback interface. State-changing requests require
 an in-memory per-process write token injected into the locally served page.
