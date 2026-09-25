@@ -25,6 +25,7 @@ export type AgentProvider = ProviderId;
 export type ExecutionShape = 'one_shot' | 'multi_scope' | 'multi_scope_unknown';
 export type TopLevelMode = 'plan' | 'execute';
 export type ExecutionProfile = 'normal' | 'shadow';
+export type ShadowExecutionPolicy = 'verify' | 'strict';
 
 export type ManualGateResumeCheck = {
   type: 'command';
@@ -431,6 +432,10 @@ export type OrchestrationState = {
   runDir: string;
   topLevelMode: TopLevelMode;
   executionProfile: ExecutionProfile;
+  // Shadow sub-policy is persisted so resume keeps the same command boundary.
+  // Normal runs always store null. Legacy Shadow states that predate this field
+  // hydrate to strict, preserving their historical no-shell behavior.
+  shadowExecutionPolicy: ShadowExecutionPolicy | null;
   allowedDirtyPaths: string[];
   agentConfig: AgentConfig;
   // How many times the read-only consultant has run for the current scope.
@@ -531,6 +536,7 @@ export type OrchestratorInit = {
   runDir: string;
   topLevelMode: TopLevelMode;
   executionProfile?: ExecutionProfile;
+  shadowExecutionPolicy?: ShadowExecutionPolicy | null;
   allowedDirtyPaths: string[];
   agentConfig: AgentConfig;
   // Resolved squash-on-completion preference (`--no-squash` resolves false);
