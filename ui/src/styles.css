@@ -1760,3 +1760,15 @@ pre { font-size: 11px; }
     justify-self: start;
   }
 }
+
+
+.config-source-wrap {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.config-source-wrap .info-tip {
+  margin-left: 0;
+}
