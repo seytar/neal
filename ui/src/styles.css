@@ -1381,3 +1381,35 @@ pre { font-size: 11px; }
 .new-run-progress strong {
   font-variant-numeric: tabular-nums;
 }
+
+
+.terminal-status-line {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px 8px;
+  overflow: hidden;
+  background: #070b0f;
+  border: 1px solid #202a34;
+  border-radius: 5px;
+}
+
+.terminal-prompt {
+  flex: 0 0 auto;
+  color: #69d7a8;
+  font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.terminal-status-line code {
+  min-width: 0;
+  overflow-x: auto;
+  color: #c7d2dd;
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+  scrollbar-width: thin;
+}
+
+.terminal-status-line code::-webkit-scrollbar {
+  height: 5px;
+}
