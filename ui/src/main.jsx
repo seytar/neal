@@ -388,6 +388,7 @@ function ActionPanel({
   setValidationNote,
   onAction,
   onArtifactTab,
+  preferredExecutionMode,
 }) {
   const status = detail.status;
   const runningAction = detail.action?.status === 'running';
@@ -596,10 +597,16 @@ function ActionPanel({
           label="Shadow will run"
         />
         <div className="actions">
-          <ActionButton kind="primary" onClick={() => onAction('execute-shadow')}>
+          <ActionButton
+            kind={preferredExecutionMode === 'normal' ? 'default' : 'primary'}
+            onClick={() => onAction('execute-shadow')}
+          >
             Execute Shadow
           </ActionButton>
-          <ActionButton onClick={() => onAction('execute-normal')}>
+          <ActionButton
+            kind={preferredExecutionMode === 'normal' ? 'primary' : 'default'}
+            onClick={() => onAction('execute-normal')}
+          >
             Execute Normal
           </ActionButton>
         </div>
@@ -1040,7 +1047,7 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!newRunOpen && newRunAction?.status !== 'running') {
+    if (newRunAction?.status !== 'running') {
       return undefined;
     }
 
@@ -1070,7 +1077,7 @@ function App() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [newRunOpen, newRunAction?.status, refreshRuns]);
+  }, [newRunAction?.status, refreshRuns]);
 
   useEffect(() => {
     void refreshRuns();
@@ -1137,6 +1144,17 @@ function App() {
     }
   }, [selectedRunId, selectedTab, loadArtifact]);
 
+  useEffect(() => {
+    const resultRunId = detail?.action?.status === 'succeeded'
+      ? detail.action.resultRunId
+      : null;
+    if (resultRunId && resultRunId !== selectedRunId) {
+      setSelectedRunId(resultRunId);
+      void refreshRuns();
+    }
+  }, [detail?.action?.status, detail?.action?.resultRunId, selectedRunId, refreshRuns]);
+
+
   const runAction = useCallback(async (action, body = {}) => {
     if (!selectedRunId) {
       return;
@@ -1168,6 +1186,14 @@ function App() {
       setError(nextError.message);
     }
   }, [selectedRunId, refreshDetail, refreshRuns]);
+
+  const openNewRun = useCallback(() => {
+    setNewRunTitle('');
+    setNewRunDescription('');
+    setNewRunMode('shadow');
+    setNewRunAction(null);
+    setNewRunOpen(true);
+  }, []);
 
   const startNewRun = useCallback(async () => {
     if (!newRunDescription.trim()) {
@@ -1202,7 +1228,7 @@ function App() {
           selectedRunId={selectedRunId}
           onSelect={setSelectedRunId}
           onCommands={() => setCommandsOpen(true)}
-          onNewRun={() => setNewRunOpen(true)}
+          onNewRun={openNewRun}
         />
         <CommandsPanel
         catalog={commandCatalog}
@@ -1235,13 +1261,26 @@ function App() {
         selectedRunId={selectedRunId}
         onSelect={setSelectedRunId}
         onCommands={() => setCommandsOpen(true)}
-        onNewRun={() => setNewRunOpen(true)}
+        onNewRun={openNewRun}
       />
 
       <CommandsPanel
         catalog={commandCatalog}
         open={commandsOpen}
         onClose={() => setCommandsOpen(false)}
+      />
+
+      <NewRunModal
+        open={newRunOpen}
+        onClose={() => setNewRunOpen(false)}
+        title={newRunTitle}
+        setTitle={setNewRunTitle}
+        description={newRunDescription}
+        setDescription={setNewRunDescription}
+        mode={newRunMode}
+        setMode={setNewRunMode}
+        action={newRunAction}
+        onStart={startNewRun}
       />
 
       <main className="main">
@@ -1283,6 +1322,7 @@ function App() {
                 setValidationNote={setValidationNote}
                 onAction={runAction}
                 onArtifactTab={selectTab}
+                preferredExecutionMode={newRunMode}
               />
               <RunFacts detail={detail} />
             </div>
