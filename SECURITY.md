@@ -112,6 +112,19 @@ machine you care about.
 See [docs/providers.md](docs/providers.md) for the per-provider permission
 boundaries, capability checks, and adapter contracts.
 
+
+### Local Control Center
+
+`neal ui` exposes a local HTTP control surface only on loopback addresses.
+The UI is a controller for Neal's existing run state, not a general shell or
+filesystem API. State-changing endpoints are allowlisted to Neal operations such
+as resume, operator guidance, Shadow feedback, and Shadow acceptance.
+
+Every state-changing request requires a random in-memory write token that is
+generated when the UI server starts and injected into the locally served page.
+The server does not enable cross-origin access. Artifact reads are restricted to
+known Neal run artifacts selected from the status snapshot.
+
 ## Reporting a Vulnerability
 
 Please report suspected vulnerabilities **privately**, not in public issues. Use
