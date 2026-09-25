@@ -215,12 +215,13 @@ function StatusPill({ lane }) {
   return <span className={'pill ' + lane}>{laneLabel(lane)}</span>;
 }
 
-function RunList({ runs, selectedRunId, onSelect }) {
+function RunList({ runs, selectedRunId, onSelect, onCommands }) {
   return (
     <aside className="sidebar">
       <div className="brand-row">
         <div className="brand">neal</div>
         <span className="brand-tag">control</span>
+        <button type="button" className="sidebar-command-button" onClick={onCommands}>commands</button>
       </div>
 
       <div className="run-list">
@@ -998,7 +999,12 @@ function App() {
   if (!selectedRunId && runs.length === 0 && !error) {
     return (
       <div className="layout">
-        <RunList runs={runs} selectedRunId={selectedRunId} onSelect={setSelectedRunId} />
+        <RunList
+          runs={runs}
+          selectedRunId={selectedRunId}
+          onSelect={setSelectedRunId}
+          onCommands={() => setCommandsOpen(true)}
+        />
         <CommandsPanel
         catalog={commandCatalog}
         open={commandsOpen}
@@ -1016,6 +1022,13 @@ function App() {
         runs={runs}
         selectedRunId={selectedRunId}
         onSelect={setSelectedRunId}
+        onCommands={() => setCommandsOpen(true)}
+      />
+
+      <CommandsPanel
+        catalog={commandCatalog}
+        open={commandsOpen}
+        onClose={() => setCommandsOpen(false)}
       />
 
       <main className="main">
