@@ -33,6 +33,9 @@ export type ProviderRoleCapabilities = {
   // True only when the coder adapter can mechanically remove shell/command
   // execution while retaining repository read/write tools.
   supportsShellDisable?: boolean;
+  // True only when the coder adapter can mechanically restrict command
+  // execution to an exact Neal-supplied allowlist for the turn.
+  supportsCommandAllowlist?: boolean;
   usageReporting: ProviderUsageReporting;
   supportedEfforts?: readonly string[];
 };
