@@ -1871,6 +1871,39 @@ function buildClaudeWritePathGuardHooks(cwd: string, allowedWritePaths: string[]
   return { PreToolUse: [{ hooks: [guard] }] };
 }
 
+function buildClaudeRunCommandGuardHooks(allowedRunCommands: string[]): Options['hooks'] {
+  const allowedCommands = new Set(allowedRunCommands.map((command) => command.trim()));
+  const guard: HookCallback = async (input) => {
+    if (input.hook_event_name !== 'PreToolUse' || input.tool_name !== 'Bash') {
+      return { continue: true };
+    }
+    const toolInput =
+      input.tool_input !== null && typeof input.tool_input === 'object'
+        ? input.tool_input as Record<string, unknown>
+        : null;
+    const command = typeof toolInput?.command === 'string' ? toolInput.command.trim() : null;
+    if (command !== null && allowedCommands.has(command)) {
+      return { continue: true };
+    }
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse' as const,
+        permissionDecision: 'deny' as const,
+        permissionDecisionReason:
+          'This Shadow turn may run only Neal-approved verification commands exactly as listed.',
+      },
+    };
+  };
+  return { PreToolUse: [{ hooks: [guard] }] };
+}
+
+function mergeClaudePreToolUseHooks(
+  ...sources: Array<Options['hooks'] | undefined>
+): Options['hooks'] | undefined {
+  const preToolUse = sources.flatMap((source) => source?.PreToolUse ?? []);
+  return preToolUse.length > 0 ? { PreToolUse: preToolUse } : undefined;
+}
+
 function buildClaudeCoderQueryOptions(
   args: CoderRunPromptArgs,
   defaultModel?: string | null,
@@ -1889,9 +1922,14 @@ function buildClaudeCoderQueryOptions(
       args.toolPolicy?.allowRun === false
         ? ['Read', 'Grep', 'Glob', 'Edit', 'Write']
         : ['Read', 'Grep', 'Glob', 'Bash', 'Edit', 'Write'],
-    hooks: args.toolPolicy?.allowedWritePaths
-      ? buildClaudeWritePathGuardHooks(args.cwd, args.toolPolicy.allowedWritePaths)
-      : undefined,
+    hooks: mergeClaudePreToolUseHooks(
+      args.toolPolicy?.allowedWritePaths
+        ? buildClaudeWritePathGuardHooks(args.cwd, args.toolPolicy.allowedWritePaths)
+        : undefined,
+      args.toolPolicy?.allowedRunCommands !== undefined
+        ? buildClaudeRunCommandGuardHooks(args.toolPolicy.allowedRunCommands)
+        : undefined,
+    ),
     resumeHandle: args.resumeHandle,
     claudeExecutablePath,
     outputSchema: args.outputSchema,
