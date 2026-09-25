@@ -367,19 +367,16 @@ async function readUiActivityTail(path: string, maxEvents = 60) {
   }
 }
 
-function slugifyUiPlanTitle(value: string) {
-  const normalized = value
-    .normalize('NFKD')
-    .replace(/[^a-zA-Z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase()
-    .slice(0, 52);
-  return normalized || 'task';
+function requireUiPlanId(body: Record<string, unknown>) {
+  const value = requireString(body, 'planId');
+  if (!/^[a-zA-Z0-9_-]{8,100}$/.test(value)) {
+    throw new UiHttpError(400, 'planId must contain only letters, numbers, underscore, or dash.');
+  }
+  return value;
 }
 
-function buildUiPlanPath(cwd: string, title: string) {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  return join(cwd, '.neal', 'ui-plans', `${stamp}-${slugifyUiPlanTitle(title)}.md`);
+function buildUiPlanPath(cwd: string, planId: string) {
+  return join(cwd, '.neal', 'ui-plans', `${planId}.md`);
 }
 
 function renderUiSeedPlan(title: string, description: string) {
@@ -556,7 +553,8 @@ async function handleApi(
     const body = await readJsonBody(req);
     const description = requireString(body, 'description');
     const title = optionalString(body, 'title') ?? description.split(/\r?\n/)[0]?.trim().slice(0, 80) ?? 'New task';
-    const planDoc = buildUiPlanPath(ctx.cwd, title);
+    const planId = requireUiPlanId(body);
+    const planDoc = buildUiPlanPath(ctx.cwd, planId);
     await mkdir(dirname(planDoc), { recursive: true });
     await writeFile(planDoc, renderUiSeedPlan(title, description), { encoding: 'utf8', flag: 'wx' });
 
