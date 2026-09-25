@@ -44,7 +44,7 @@
     "pnpm": ">=11.27.0"
   },
   "scripts": {
-    "build": "rm -rf dist && node node_modules/typescript-7/bin/tsc -p tsconfig.json && vite build --config ui/vite.config.js && chmod +x dist/neal/index.js",
+    "build": "rm -rf dist && node node_modules/typescript-7/bin/tsc -p tsconfig.json && pnpm run build:ui && chmod +x dist/neal/index.js",
     "pack:local": "pnpm build && pnpm pack",
     "verify:package": "pnpm build && node scripts/verify-package.mjs",
     "validate:release": "node scripts/validate-release.mjs",
@@ -52,7 +52,8 @@
     "lint": "eslint src test",
     "start": "tsx src/neal/index.ts",
     "test": "NEAL_NOTIFY_BIN= node --import tsx --test test/*.test.ts",
-    "typecheck": "node node_modules/typescript-7/bin/tsc --noEmit -p tsconfig.json && node node_modules/typescript-7/bin/tsc -p tsconfig.test.json"
+    "typecheck": "node node_modules/typescript-7/bin/tsc --noEmit -p tsconfig.json && node node_modules/typescript-7/bin/tsc -p tsconfig.test.json",
+    "build:ui": "vite build --config ui/vite.config.js"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.52",
