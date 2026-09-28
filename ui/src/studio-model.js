@@ -56,3 +56,42 @@ export function studioIssueVisualState(issue, index) {
     ].filter(Boolean).join(' '),
   };
 }
+
+
+export function studioBlockerSummary(status) {
+  const blockedLike =
+    status?.status === 'blocked' ||
+    status?.status === 'failed' ||
+    status?.effectiveStatus === 'blocked' ||
+    status?.effectiveStatus === 'failed';
+
+  if (!blockedLike) {
+    return null;
+  }
+
+  const reason =
+    status.blocker?.reason ||
+    status.blockedGuidance?.reason ||
+    status.blockedGuidance?.summary ||
+    status.resumeDecision?.blocker ||
+    status.providerError?.message ||
+    'Neal stopped in a blocked state, but no specific blocker reason was recorded.';
+
+  const source =
+    status.blocker?.source ||
+    (status.blockedGuidance ? 'blocked guidance' : null) ||
+    (status.providerError ? 'provider error' : null);
+
+  return {
+    reason,
+    source,
+    artifactPaths: status.blocker?.artifactPaths || [],
+    resumeAvailable: status.resumeDecision?.kind === 'continue',
+    resumeReason: status.resumeDecision?.kind === 'continue'
+      ? status.resumeDecision.reason
+      : null,
+    resumeCommand: status.resumeDecision?.kind === 'continue'
+      ? status.resumeDecision.resumeCommand
+      : null,
+  };
+}
