@@ -313,19 +313,21 @@ body.studio-resizing .sidebar-resizer::after {
 h1 {
   min-width: 0;
   margin: 0;
-  overflow: hidden;
+  overflow: visible;
   font-size: 17px;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .run-id {
-  overflow: hidden;
+  min-width: 0;
+  overflow: visible;
   color: #748294;
   font: 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 h2 {
