@@ -11,6 +11,7 @@ import {
 import {
   acceptShadowPrivateValidation,
   applyExecutionProfilePrompt,
+  applyShadowCompletionSummaryPrompt,
   getExecutionCoderToolPolicy,
   reopenShadowRunFromPrivateFeedback,
 } from '../src/neal/shadow-mode.js';
@@ -23,6 +24,39 @@ test('shadow profile mechanically disables coder shell while normal mode is unch
   const shadow = applyExecutionProfilePrompt('implement', 'shadow');
   assert.match(shadow, /Shell\/command execution is mechanically disabled/);
   assert.match(shadow, /Do not claim runtime verification passed/);
+});
+
+test('Shadow completion summary overlay keeps local verification truthful', () => {
+  const canonical = [
+    'before',
+    'Shadow mode is active: shell execution was intentionally disabled during implementation.',
+    'Judge planGoalSatisfied by static implementation completeness. Private runtime validation is a later explicit gate.',
+    'The absence of runtime/build/test command evidence is expected in Shadow mode and must not by itself become a remainingKnownGap.',
+    'State clearly in verificationSummary that runtime verification was not run in Neal.',
+    'after',
+  ].join('\n');
+
+  assert.equal(applyShadowCompletionSummaryPrompt(canonical, 'normal'), canonical);
+  const shadow = applyShadowCompletionSummaryPrompt(canonical, 'shadow');
+  assert.match(shadow, /local verification commands that actually ran/);
+  assert.match(shadow, /private\/live runtime validation that is still pending/);
+  assert.doesNotMatch(shadow, /runtime verification was not run in Neal/);
+});
+
+test('Shadow verify exposes only Neal-approved verification commands', () => {
+  const commands = ['pnpm test', 'php -l app/Foo.php'];
+  assert.deepEqual(getExecutionCoderToolPolicy('shadow', 'verify', commands), {
+    allowRun: true,
+    allowedRunCommands: commands,
+  });
+  assert.deepEqual(getExecutionCoderToolPolicy('shadow', 'verify', []), { allowRun: false });
+
+  const prompt = applyExecutionProfilePrompt('implement', 'shadow', 'verify', commands);
+  assert.match(prompt, /verify policy/);
+  assert.match(prompt, /pnpm test/);
+  assert.match(prompt, /php -l app\/Foo\.php/);
+  assert.match(prompt, /Do not start applications, servers, watchers/);
+  assert.match(prompt, /Do not create a manual gate solely because private\/live runtime evidence is unavailable/);
 });
 
 test('Shadow does not pin planner or reviewer providers', () => {
@@ -105,6 +139,8 @@ async function createShadowWaitingState() {
     },
     '1111111111111111111111111111111111111111',
   );
+  assert.equal(state.shadowExecutionPolicy, 'verify');
+
   return {
     ...state,
     phase: 'awaiting_private_validation' as const,

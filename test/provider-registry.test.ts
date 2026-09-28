@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   assertAgentConfigSupportsResume,
+  assertAgentConfigSupportsShadowRun,
   assertAgentConfigSupportsWriterRun,
   assertProviderSupportsCoder,
   assertProviderSupportsStructuredAdvisor,
@@ -384,6 +385,8 @@ test('openai-compatible is registered and passes coder, planner, and reviewer ca
   const capabilities = getProviderDefinition('openai-compatible').capabilities;
   assert.equal(capabilities.coder.supported, true);
   assert.equal(capabilities.coder.supportsSessionResume, true);
+  assert.equal(capabilities.coder.supportsShellDisable, true);
+  assert.equal(capabilities.coder.supportsExactCommandAllowlist, true);
   assert.equal(capabilities['structured-advisor'].supported, true);
   assert.equal(capabilities['structured-advisor'].supportsSessionResume, false);
   assert.equal(capabilities['structured-advisor'].toolAccess.read, true);
@@ -451,6 +454,93 @@ test('openai-compatible writer handles satisfy Neal resume while reviewer handle
         executionProfile: 'normal',
       }),
     /reviewer role: .*missing session resume/,
+  );
+});
+
+
+test('built-in Shadow-capable coder providers declare exact command allowlisting', () => {
+  for (const provider of ['anthropic-claude', 'openai-compatible']) {
+    const capabilities = getProviderDefinition(provider).capabilities.coder;
+    assert.equal(capabilities.supportsShellDisable, true, `${provider} must support shell disable`);
+    assert.equal(
+      capabilities.supportsExactCommandAllowlist,
+      true,
+      `${provider} must support exact command allowlisting`,
+    );
+  }
+});
+
+test('Shadow capability checks distinguish strict shell-disable from verify exact-command allowlisting', () => {
+  registerProviderDefinitionForTesting(
+    createFakeProviderDefinition({
+      id: 'fake-shadow-strict-only',
+      capabilities: {
+        coder: {
+          ...fakeProviderDefaultCapabilities.coder,
+          supportsShellDisable: true,
+        },
+        'structured-advisor': fakeProviderDefaultCapabilities['structured-advisor'],
+      },
+    }),
+  );
+
+  const strictOnlyConfig = {
+    planner: { provider: 'fake-shadow-strict-only', model: null },
+    coder: { provider: 'fake-shadow-strict-only', model: null },
+    reviewer: { provider: 'fake-shadow-strict-only', model: null },
+  };
+
+  assert.doesNotThrow(() =>
+    assertAgentConfigSupportsShadowRun(strictOnlyConfig, {
+      shadowExecutionPolicy: 'strict',
+    }),
+  );
+
+  assert.throws(
+    () =>
+      assertAgentConfigSupportsShadowRun(strictOnlyConfig, {
+        shadowExecutionPolicy: 'verify',
+      }),
+    /coder role: .*missing exact command allowlist/,
+  );
+
+  assert.doesNotThrow(() =>
+    assertAgentConfigSupportsWriterRun(strictOnlyConfig),
+  );
+
+  assert.doesNotThrow(() =>
+    assertAgentConfigSupportsResume(strictOnlyConfig, {
+      plannerSessionHandle: null,
+      coderSessionHandle: null,
+      reviewerSessionHandle: null,
+      executionProfile: 'shadow',
+    }),
+  );
+
+  registerProviderDefinitionForTesting(
+    createFakeProviderDefinition({
+      id: 'fake-shadow-verify',
+      capabilities: {
+        coder: {
+          ...fakeProviderDefaultCapabilities.coder,
+          supportsShellDisable: true,
+          supportsExactCommandAllowlist: true,
+        },
+        'structured-advisor': fakeProviderDefaultCapabilities['structured-advisor'],
+      },
+    }),
+  );
+
+  const verifyConfig = {
+    planner: { provider: 'fake-shadow-verify', model: null },
+    coder: { provider: 'fake-shadow-verify', model: null },
+    reviewer: { provider: 'fake-shadow-verify', model: null },
+  };
+
+  assert.doesNotThrow(() =>
+    assertAgentConfigSupportsShadowRun(verifyConfig, {
+      shadowExecutionPolicy: 'verify',
+    }),
   );
 });
 

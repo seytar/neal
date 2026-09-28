@@ -1,23 +1,62 @@
 import { createNextScopeEntryReset } from './orchestrator/transitions.js';
 import type { CoderRunPromptArgs } from './providers/types.js';
 import { shouldAdvanceTopLevelScopeNumber } from './scopes.js';
-import type { ExecutionProfile, OrchestrationState } from './types.js';
+import type { ExecutionProfile, OrchestrationState, ShadowExecutionPolicy } from './types.js';
 
 export function getExecutionCoderToolPolicy(
   executionProfile: ExecutionProfile,
+  shadowExecutionPolicy: ShadowExecutionPolicy = 'strict',
+  allowedVerificationCommands: readonly string[] = [],
 ): CoderRunPromptArgs['toolPolicy'] | undefined {
-  return executionProfile === 'shadow' ? { allowRun: false } : undefined;
+  if (executionProfile !== 'shadow') {
+    return undefined;
+  }
+
+  if (shadowExecutionPolicy === 'verify' && allowedVerificationCommands.length > 0) {
+    return {
+      allowRun: true,
+      allowedRunCommands: [...allowedVerificationCommands],
+    };
+  }
+
+  return { allowRun: false };
 }
 
-export function applyExecutionProfilePrompt(prompt: string, executionProfile: ExecutionProfile): string {
+export function applyExecutionProfilePrompt(
+  prompt: string,
+  executionProfile: ExecutionProfile,
+  shadowExecutionPolicy: ShadowExecutionPolicy = 'strict',
+  allowedVerificationCommands: readonly string[] = [],
+): string {
   if (executionProfile !== 'shadow') {
     return prompt;
+  }
+
+  if (shadowExecutionPolicy === 'verify') {
+    const commandLines = allowedVerificationCommands.length > 0
+      ? [
+          '- You may run only these Neal-approved current-scope verification commands, exactly as written:',
+          ...allowedVerificationCommands.map((command) => `  - \`${command}\``),
+        ]
+      : ['- No current-scope verification command was approved, so shell/command execution remains unavailable.'];
+
+    return [
+      prompt,
+      '',
+      'Shadow mode constraints (verify policy):',
+      '- Arbitrary shell execution is mechanically restricted. You may inspect and edit files in the checkout using the normal jailed tools.',
+      ...commandLines,
+      '- Do not start applications, servers, watchers, containers, migrations, deploys, network probes, or other live/runtime services.',
+      '- Do not claim private runtime verification passed. Distinguish any local verification that actually ran from private/live validation that did not.',
+      '- Missing private runtime evidence is expected in Shadow mode and is not, by itself, a blocker to completing the static implementation.',
+      '- Do not create a manual gate solely because private/live runtime evidence is unavailable in the Shadow checkout; that evidence belongs to the later private-validation gate.',
+    ].join('\n');
   }
 
   return [
     prompt,
     '',
-    'Shadow mode constraints:',
+    'Shadow mode constraints (strict policy):',
     '- Shell/command execution is mechanically disabled for this turn.',
     '- You may inspect and edit files in the checkout using non-shell tools.',
     '- Do not run or claim to have run tests, builds, linters, migrations, executables, services, or runtime checks.',
@@ -27,6 +66,52 @@ export function applyExecutionProfilePrompt(prompt: string, executionProfile: Ex
   ].join('\n');
 }
 
+
+
+export function applyShadowCompletionSummaryPrompt(
+  prompt: string,
+  executionProfile: ExecutionProfile,
+): string {
+  if (executionProfile !== 'shadow') {
+    return prompt;
+  }
+
+  const legacyBlock = [
+    'Shadow mode is active: shell execution was intentionally disabled during implementation.',
+    'Judge planGoalSatisfied by static implementation completeness. Private runtime validation is a later explicit gate.',
+    'The absence of runtime/build/test command evidence is expected in Shadow mode and must not by itself become a remainingKnownGap.',
+    'State clearly in verificationSummary that runtime verification was not run in Neal.',
+  ].join('\n');
+
+  const policyAwareBlock = [
+    'Shadow mode is active: arbitrary shell and private/live runtime execution are restricted during implementation.',
+    'Judge planGoalSatisfied by static implementation completeness. Private runtime validation is a later explicit gate.',
+    'Summarize any local verification commands that actually ran, but distinguish them from private/live runtime validation that is still pending.',
+    'The absence of private/live runtime evidence is expected in Shadow mode and must not by itself become a remainingKnownGap.',
+  ].join('\n');
+
+  return prompt.replace(legacyBlock, policyAwareBlock);
+}
+
+export function applyReviewerExecutionProfilePrompt(
+  prompt: string,
+  executionProfile: ExecutionProfile,
+): string {
+  if (executionProfile !== 'shadow') {
+    return prompt;
+  }
+
+  return [
+    prompt,
+    '',
+    'Shadow review constraints:',
+    '- Shadow mode is active. Review the implementation statically and use any verification evidence that actually exists, but treat private/live runtime validation as a later explicit gate.',
+    '- The absence of evidence that requires a private dependency tree, live application server, credentials, database, external store, network access, or other unavailable runtime state is not by itself a blocking finding in this scope review.',
+    '- Do not require the coder to open a manual gate solely to obtain private/live runtime evidence. If the implementation is statically correct, leave that evidence for Shadow private validation after static acceptance.',
+    '- Static correctness defects, missing implementation, unsafe code, and verification tooling or test gaps that are visible in the repository remain ordinary review findings and may still block.',
+    '- Do not use meaningfulProgressAction=block_for_operator solely because private/live runtime evidence is pending.',
+  ].join('\n');
+}
 
 export function reopenShadowRunFromPrivateFeedback(
   state: OrchestrationState,

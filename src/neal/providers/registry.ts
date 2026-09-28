@@ -8,7 +8,13 @@ import type {
   ProviderRoleCapabilities,
   StructuredAdvisorAdapter,
 } from './types.js';
-import type { AgentConfig, AgentProvider, AgentRoleConfig, OrchestrationState } from '../types.js';
+import type {
+  AgentConfig,
+  AgentProvider,
+  AgentRoleConfig,
+  OrchestrationState,
+  ShadowExecutionPolicy,
+} from '../types.js';
 
 type ProviderAdapterFactories = {
   createCoderAdapter?: (config: AgentRoleConfig) => CoderAdapter;
@@ -24,6 +30,7 @@ type ProviderCapabilityName =
   | 'write_tool_access'
   | 'structured_output'
   | 'shell_disable'
+  | 'exact_command_allowlist'
   | 'model_override'
   | 'session_resume';
 
@@ -35,6 +42,7 @@ export type ProviderCapabilityRequirementContext = {
   requireWriteToolAccess?: boolean;
   requireStructuredOutput?: boolean;
   requireShellDisable?: boolean;
+  requireExactCommandAllowlist?: boolean;
   requireSessionResume?: boolean;
   reasons?: Partial<Record<ProviderCapabilityName, string>>;
 };
@@ -46,7 +54,7 @@ export type AgentConfigCapabilityAssertionOptions = {
 type ResumeCapabilityState = Pick<
   OrchestrationState,
   'coderSessionHandle' | 'reviewerSessionHandle'
-> & Partial<Pick<OrchestrationState, 'plannerSessionHandle' | 'executionProfile'>>;
+> & Partial<Pick<OrchestrationState, 'plannerSessionHandle' | 'executionProfile' | 'shadowExecutionPolicy'>>;
 
 // Computed lazily instead of as a top-level constant: openai-compatible.ts
 // imports config.ts, which imports this module, so the definition bindings may
@@ -211,6 +219,17 @@ function assertRoleCapabilities(args: {
       requirementContext: args.requirementContext,
       config: args.config,
       missingCapability: 'shell_disable',
+    });
+  }
+
+  if (
+    args.requirementContext.requireExactCommandAllowlist &&
+    args.capabilities.supportsExactCommandAllowlist !== true
+  ) {
+    throwProviderCapabilityError({
+      requirementContext: args.requirementContext,
+      config: args.config,
+      missingCapability: 'exact_command_allowlist',
     });
   }
 
@@ -425,19 +444,28 @@ export function assertAgentConfigSupportsWriterRun(
 
 export function assertAgentConfigSupportsShadowRun(
   agentConfig: AgentConfig,
-  options: AgentConfigCapabilityAssertionOptions = {},
+  options: AgentConfigCapabilityAssertionOptions & {
+    shadowExecutionPolicy?: ShadowExecutionPolicy;
+  } = {},
 ) {
   const context = options.context ?? 'shadow writer run';
+  const shadowExecutionPolicy = options.shadowExecutionPolicy ?? 'strict';
   assertAgentConfigSupportsWriterRun(agentConfig, { context });
   assertProviderSupportsCoder(agentConfig.coder, {
     role: 'coder',
     context,
-    reason: 'Shadow mode must mechanically disable shell execution while preserving repository read/write access',
+    reason: `Shadow ${shadowExecutionPolicy} policy must be mechanically enforced while preserving repository read/write access`,
     requireWriteToolAccess: true,
     requireStructuredOutput: true,
     requireShellDisable: true,
+    requireExactCommandAllowlist: shadowExecutionPolicy === 'verify',
     reasons: {
-      shell_disable: 'Shadow mode may edit the checkout but must never execute project commands, tests, builds, migrations, or binaries',
+      shell_disable:
+        shadowExecutionPolicy === 'strict'
+          ? 'Shadow strict policy must mechanically disable all project command execution'
+          : 'Shadow verify policy must mechanically disable command execution when no approved verification commands are available',
+      exact_command_allowlist:
+        'Shadow verify policy may run only exact Neal-approved verification commands from the active scope',
       coder_adapter: 'Shadow mode starts implementation turns through the configured coder adapter',
       write_tool_access: 'Shadow mode still needs source edits in the anonymized checkout',
       structured_output: 'Shadow mode uses schema-validated execution payloads',
@@ -453,7 +481,10 @@ export function assertAgentConfigSupportsResume(
 ) {
   const context = options.context ?? 'writer run resume';
   if (state.executionProfile === 'shadow') {
-    assertAgentConfigSupportsShadowRun(agentConfig, { context });
+    assertAgentConfigSupportsShadowRun(agentConfig, {
+      context,
+      shadowExecutionPolicy: state.shadowExecutionPolicy ?? 'strict',
+    });
   } else {
     assertAgentConfigSupportsWriterRun(agentConfig, { context });
   }

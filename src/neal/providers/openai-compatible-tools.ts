@@ -97,6 +97,11 @@ export type OpenAICompatibleToolsetOptions = {
    */
   allowRun?: boolean;
   /**
+   * Optional exact command allowlist. When present, the run tool accepts only
+   * trimmed commands that exactly match one of these entries.
+   */
+  allowedRunCommands?: string[];
+  /**
    * Event-emission hook invoked synchronously during tool execution.
    * Emitter failures are swallowed: telemetry must never turn a tool result
    * into a thrown error (errors-as-results is the loop contract).
@@ -538,6 +543,9 @@ function buildTools(rootDir: string, options?: OpenAICompatibleToolsetOptions) {
   const runTimeoutMs = options?.runTimeoutMs ?? DEFAULT_RUN_TIMEOUT_MS;
   const allowedWritePaths = options?.allowedWritePaths;
   const allowRun = options?.allowRun ?? true;
+  const allowedRunCommands = options?.allowedRunCommands === undefined
+    ? undefined
+    : new Set(options.allowedRunCommands.map((command) => command.trim()));
   const hook = options?.emitToolEvent;
 
   /** Telemetry must never break tool execution; emitter failures are swallowed. */
@@ -711,9 +719,17 @@ function buildTools(rootDir: string, options?: OpenAICompatibleToolsetOptions) {
           emit({ type: 'tool_progress', toolName: 'run', message: result, isError: true });
           return result;
         }
+        const command = input.command.trim();
+        if (allowedRunCommands !== undefined && !allowedRunCommands.has(command)) {
+          const result = truncateResult(
+            `${TOOL_ERROR_PREFIX}command is not in the Neal-approved verification allowlist for this turn`,
+          );
+          emit({ type: 'tool_progress', toolName: 'run', message: result, isError: true });
+          return result;
+        }
         let outcome: RunOutcome;
         try {
-          outcome = await runBody(rootDir, input.command, runTimeoutMs);
+          outcome = await runBody(rootDir, command, runTimeoutMs);
         } catch (error) {
           // Unexpected infrastructure failure (exec callback contract broke):
           // keep the errors-as-results posture and attribute the error.
@@ -726,7 +742,7 @@ function buildTools(rootDir: string, options?: OpenAICompatibleToolsetOptions) {
         emit({
           type: 'command_completed',
           toolName: 'run',
-          command: input.command,
+          command,
           exitCode: outcome.exitCode,
           output: result,
           cwd: path.resolve(rootDir),

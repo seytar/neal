@@ -33,6 +33,9 @@ export type ProviderRoleCapabilities = {
   // True only when the coder adapter can mechanically remove shell/command
   // execution while retaining repository read/write tools.
   supportsShellDisable?: boolean;
+  // True only when the coder adapter can mechanically restrict command
+  // execution to an exact Neal-supplied allowlist for the turn.
+  supportsExactCommandAllowlist?: boolean;
   usageReporting: ProviderUsageReporting;
   supportedEfforts?: readonly string[];
 };
@@ -176,6 +179,9 @@ export type CoderRunPromptArgs = {
   toolPolicy?: {
     allowedWritePaths?: string[];
     allowRun?: boolean;
+    // When present, command execution is restricted to exact trimmed matches.
+    // Undefined preserves normal execute-mode shell behavior.
+    allowedRunCommands?: string[];
   };
   outputSchema?: Record<string, unknown>;
   onSessionStarted?: (sessionHandle: string) => void | Promise<void>;
