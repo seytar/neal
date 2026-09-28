@@ -376,6 +376,7 @@ async function buildUiConfigSnapshot(cwd: string) {
   };
 
   return {
+    workspaceRoot: cwd,
     sources,
     precedence: ['repo neal.yml', 'user ~/.neal/config.yml', 'built-in defaults'],
     roles,
