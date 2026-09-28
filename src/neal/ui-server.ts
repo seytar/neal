@@ -67,8 +67,9 @@ const MAX_UI_ISSUE_FILES = 1000;
 
 export type NealUiLane =
   | 'running'
-  | 'needs_you'
+  | 'action_required'
   | 'private_validation'
+  | 'blocked'
   | 'failed'
   | 'done';
 
@@ -131,12 +132,17 @@ export function classifyUiRun(run: UiClassifiableRun): NealUiLane {
     run.pendingOperatorGuidance ||
     run.manualGate !== null ||
     run.effectiveStatus === 'paused' ||
-    run.resumeDecision?.kind === 'continue'
+    run.resumeDecision?.kind === 'continue' ||
+    run.resumeDecision?.kind === 'needs_message' ||
+    run.resumeDecision?.kind === 'pending_message'
   ) {
-    return 'needs_you';
+    return 'action_required';
   }
-  if (run.status === 'failed' || run.status === 'blocked' || run.effectiveStatus === 'blocked') {
+  if (run.status === 'failed' || run.effectiveStatus === 'failed') {
     return 'failed';
+  }
+  if (run.status === 'blocked' || run.effectiveStatus === 'blocked') {
+    return 'blocked';
   }
   return 'running';
 }
