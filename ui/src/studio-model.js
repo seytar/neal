@@ -28,7 +28,7 @@ export function laneLabel(lane) {
     ready: 'Ready',
     running: 'Running',
     action_required: 'Action required',
-    private_validation: 'Validation',
+    private_validation: 'Validation required',
     unprocessed: 'Unprocessed',
     blocked: 'Blocked',
     failed: 'Failed',
@@ -76,7 +76,7 @@ export function studioBlockerSummary(status) {
     status.blockedGuidance?.summary ||
     status.resumeDecision?.blocker ||
     status.providerError?.message ||
-    'Neal stopped in a blocked state, but no specific blocker reason was recorded.';
+    'Neal stopped, but no specific blocker reason was recorded.';
 
   const source =
     status.blocker?.source ||
