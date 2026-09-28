@@ -7,10 +7,9 @@ import {
   DEFAULT_SIDEBAR_WIDTH,
   clampSidebarWidth,
   issueLane,
-  laneLabel,
-  studioIssueVisualState,
   studioSidebarStorageKey,
 } from './studio-model.js';
+import { StatusPill, StudioIssueCard } from './studio-issue-card.jsx';
 
 import './styles.css';
 
@@ -795,10 +794,6 @@ function NewIssueModal({
   );
 }
 
-function StatusPill({ lane }) {
-  return <span className={'pill ' + lane}>{laneLabel(lane)}</span>;
-}
-
 function IssueList({
   issues,
   selectedIssuePath,
@@ -827,37 +822,15 @@ function IssueList({
       <div className="run-list">
         {issues.length === 0 ? (
           <div className="muted">No issues yet.</div>
-        ) : issues.map((issue, index) => {
-          const run = issue.currentRun;
-          const active = issue.planDoc === selectedIssuePath;
-          const visual = studioIssueVisualState({ ...issue, active }, index);
-          const { lane, latest, className } = visual;
-
-          return (
-            <button
-              type="button"
-              className={className}
-              key={issue.key}
-              onClick={() => onSelect(issue)}
-            >
-              <div className="run-head">
-                <div className="run-title-wrap">
-                  {latest ? <span className="latest-badge">Latest</span> : null}
-                  <div className="run-title">{issue.title}</div>
-                </div>
-                <StatusPill lane={lane} />
-              </div>
-              <div className="run-meta-line">
-                <span>{run
-                  ? issue.runs.length + ' ' + (issue.runs.length === 1 ? 'attempt' : 'attempts')
-                  : (issue.readyWithoutRun ? 'existing plan' : 'not processed')}</span>
-                <span>{run
-                  ? (run.topLevelMode === 'plan' && run.status === 'done' ? 'ready to execute' : run.publicPhase)
-                  : (issue.readyWithoutRun ? 'ready to execute' : issue.displayPath)}</span>
-              </div>
-            </button>
-          );
-        })}
+        ) : issues.map((issue, index) => (
+          <StudioIssueCard
+            key={issue.key}
+            issue={issue}
+            index={index}
+            selectedIssuePath={selectedIssuePath}
+            onSelect={onSelect}
+          />
+        ))}
       </div>
       <div
         className="sidebar-resizer"
