@@ -642,6 +642,10 @@ pre {
     border-bottom: 1px solid #202833;
   }
 
+  .sidebar-resizer {
+    display: none;
+  }
+
   .guidance-option {
     grid-template-columns: 1fr;
   }
