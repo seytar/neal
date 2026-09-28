@@ -265,7 +265,7 @@ may participate; see [docs/providers.md](docs/providers.md) and
 [SECURITY.md](SECURITY.md).
 
 
-### Local Control Center
+### Neal Studio
 
 `neal ui` starts a localhost-only visual controller for Neal's existing state
 machine:
@@ -276,11 +276,11 @@ neal ui --port 7331
 neal ui --no-open
 ```
 
-The Control Center does not maintain a second run database. It reads the same
+Neal Studio does not maintain a second run database. It reads the same
 run state exposed by `neal status`, `neal changes`, and `neal usage`, then
 presents operator-facing actions as buttons and forms.
 
-The Control Center is issue-oriented while the CLI remains plan-oriented. Configure a
+Neal Studio is issue-oriented while the CLI remains plan-oriented. Configure a
 repository-relative Issues path in the UI and Neal recursively discovers Markdown files
 there. Files with no Neal history appear as Unprocessed, canonical executable plans
 appear as Ready without being replanned, and prior runs remain visible even when their
@@ -469,7 +469,7 @@ commands, and `--json` emits a machine-readable snapshot. If `HEAD` is not
 descended from a recorded base, the affected range is reported as unknown
 rather than being attributed to Neal.
 
-`neal ui` starts the localhost-only Control Center for the current repository.
+`neal ui` starts the localhost-only Neal Studio for the current repository.
 It visualizes the same run state exposed by the status/changes/usage commands
 and provides allowlisted operator actions for resume, guidance, manual gates,
 and Shadow private validation.
