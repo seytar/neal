@@ -136,8 +136,7 @@ export async function initializeOrchestration(
     topLevelMode,
     runDir: options?.runDir,
   });
-  const planDocBackupPath =
-    topLevelMode === 'plan' ? await createPlanDocumentBackup(absolutePlanDoc, logger.runDir) : null;
+  const planDocBackupPath = await createPlanDocumentBackup(absolutePlanDoc, logger.runDir);
 
   const init: OrchestratorInit = {
     cwd,
