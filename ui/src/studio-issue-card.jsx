@@ -3,7 +3,11 @@ import React from 'react';
 import { laneLabel, studioIssueVisualState } from './studio-model.js';
 
 export function StatusPill({ lane }) {
-  return <span className={'pill ' + lane}>{laneLabel(lane)}</span>;
+  return (
+    <React.Fragment>
+      <span className={'pill ' + lane}>{laneLabel(lane)}</span>
+    </React.Fragment>
+  );
 }
 
 export function StudioIssueCard({
