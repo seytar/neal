@@ -103,6 +103,7 @@ test('Studio labels operator work, blocked runs, and failed runs distinctly', ()
   assert.equal(laneLabel('action_required'), 'Action required');
   assert.equal(laneLabel('blocked'), 'Blocked');
   assert.equal(laneLabel('failed'), 'Failed');
+  assert.equal(laneLabel('private_validation'), 'Validation required');
 
   for (const lane of ['action_required', 'blocked', 'failed']) {
     const visual = studioIssueVisualState({
