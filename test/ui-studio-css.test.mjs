@@ -51,3 +51,24 @@ test('Studio keeps viewport fixed while the issue list scrolls independently', (
   assert.match(mainRule, /height:\s*100vh/);
   assert.match(mainRule, /overflow:\s*auto/);
 });
+
+
+test('Studio defines a consistent custom scrollbar system', () => {
+  const rootRule = css.match(/:root\s*\{([\s\S]*?)\}/)?.[1] || '';
+  const universalRule = css.match(/\*\s*\{([\s\S]*?)\}/)?.[1] || '';
+
+  assert.match(rootRule, /--studio-scroll-track:/);
+  assert.match(rootRule, /--studio-scroll-thumb:/);
+  assert.match(rootRule, /--studio-scroll-thumb-hover:/);
+  assert.match(rootRule, /--studio-scroll-thumb-active:/);
+
+  assert.match(universalRule, /scrollbar-width:\s*thin/);
+  assert.match(universalRule, /scrollbar-color:/);
+
+  assert.match(css, /\*::-webkit-scrollbar\s*\{/);
+  assert.match(css, /\*::-webkit-scrollbar-track\s*\{/);
+  assert.match(css, /\*::-webkit-scrollbar-thumb\s*\{/);
+  assert.match(css, /\*::-webkit-scrollbar-thumb:hover\s*\{/);
+  assert.match(css, /\*::-webkit-scrollbar-thumb:active\s*\{/);
+  assert.match(css, /\.run-list::-webkit-scrollbar\s*\{/);
+});
