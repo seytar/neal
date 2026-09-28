@@ -536,6 +536,16 @@ async function buildUiTerminalFooterLine(status: NealStatusSnapshot) {
   });
 }
 
+async function readUiIssueTitle(planDoc: string) {
+  try {
+    const content = await readFile(planDoc, 'utf8');
+    const heading = content.match(/^#\s+(.+?)\s*$/m)?.[1]?.trim();
+    return heading || null;
+  } catch {
+    return null;
+  }
+}
+
 async function buildRunDetail(ctx: UiServerContext, runId: string) {
   const resolution = await resolveRunStatePath({ cwd: ctx.cwd, runId });
   const status = await buildStatusSnapshot({
@@ -555,6 +565,7 @@ async function buildRunDetail(ctx: UiServerContext, runId: string) {
 
   return {
     status,
+    uiTitle: await readUiIssueTitle(status.planDoc),
     terminalFooterLine: await buildUiTerminalFooterLine(status),
     uiLane: classifyUiRun(status),
     action: directAction ?? inheritedAction,
@@ -966,13 +977,26 @@ async function handleApi(
 
   if (req.method === 'GET' && pathname === '/api/runs') {
     const snapshot = await buildStatusListSnapshot({ cwd: ctx.cwd });
+    const titleByPlan = new Map<string, Promise<string | null>>();
+    const getTitle = (planDoc: string) => {
+      const key = resolve(planDoc);
+      const cached = titleByPlan.get(key);
+      if (cached) {
+        return cached;
+      }
+      const title = readUiIssueTitle(planDoc);
+      titleByPlan.set(key, title);
+      return title;
+    };
+    const runs = await Promise.all(snapshot.runs.map(async (run) => ({
+      ...run,
+      uiTitle: await getTitle(run.planDoc),
+      uiLane: classifyUiRun(run),
+      action: ctx.actions.get(run.runId) ?? null,
+    })));
     json(res, 200, {
       ...snapshot,
-      runs: snapshot.runs.map((run) => ({
-        ...run,
-        uiLane: classifyUiRun(run),
-        action: ctx.actions.get(run.runId) ?? null,
-      })),
+      runs,
     });
     return;
   }
