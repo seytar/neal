@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { resolve as resolvePath } from 'node:path';
 
 import {
+  artifactPathFor,
   classifyUiRun,
   getUiIssueTitleFromPlanContent,
   resolveUiIssuesPath,
 } from '../src/neal/ui-server.js';
+import type { NealStatusSnapshot } from '../src/neal/status.js';
 
 const base = {
   phase: 'coder_scope' as const,
@@ -127,4 +129,36 @@ test('UI issues path is repository-relative and cannot escape the checkout', () 
     () => resolveUiIssuesPath(cwd, '/tmp/outside'),
     /relative to the repository root/,
   );
+});
+
+
+test('Studio maps Original and Plan to distinct artifacts without legacy fallback', () => {
+  const status = {
+    planDoc: '/repo/current-plan.md',
+    artifacts: {
+      originalPlanPath: '/repo/.neal/runs/run-1/PLAN_ORIGINAL.md',
+      progressMarkdownPath: '/repo/.neal/runs/run-1/PLAN_PROGRESS.md',
+      reviewMarkdownPath: '/repo/.neal/runs/run-1/REVIEW.md',
+      recoveryMarkdownPath: '/repo/.neal/runs/run-1/RECOVERY.md',
+      runNarrativeMarkdownPath: '/repo/.neal/runs/run-1/RUN_NARRATIVE.md',
+    },
+    manualGate: null,
+  } as unknown as NealStatusSnapshot;
+
+  assert.equal(
+    artifactPathFor(status, 'original'),
+    '/repo/.neal/runs/run-1/PLAN_ORIGINAL.md',
+  );
+  assert.equal(artifactPathFor(status, 'plan'), '/repo/current-plan.md');
+
+  const legacyStatus = {
+    ...status,
+    artifacts: {
+      ...status.artifacts,
+      originalPlanPath: null,
+    },
+  } as NealStatusSnapshot;
+
+  assert.equal(artifactPathFor(legacyStatus, 'original'), null);
+  assert.equal(artifactPathFor(legacyStatus, 'plan'), '/repo/current-plan.md');
 });
