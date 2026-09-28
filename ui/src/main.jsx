@@ -59,8 +59,22 @@ function groupRunsIntoIssues(runs) {
   return [...issues.values()];
 }
 
+function issueLane(run) {
+  if (run?.topLevelMode === 'plan') {
+    if (run.status === 'done') {
+      return 'ready';
+    }
+    if (run.uiLane === 'running') {
+      return 'planning';
+    }
+  }
+  return run?.uiLane || 'running';
+}
+
 function laneLabel(lane) {
   return {
+    planning: 'Planning',
+    ready: 'Ready',
     running: 'Running',
     needs_you: 'Needs you',
     private_validation: 'Validation',
@@ -821,11 +835,11 @@ function IssueList({ runs, selectedRunId, onSelect, onCommands, onConfig, onNewR
             >
               <div className="run-head">
                 <div className="run-title">{issue.title}</div>
-                <StatusPill lane={run.uiLane} />
+                <StatusPill lane={issueLane(run)} />
               </div>
               <div className="run-meta-line">
                 <span>{issue.runs.length} {issue.runs.length === 1 ? 'attempt' : 'attempts'}</span>
-                <span>{run.publicPhase}</span>
+                <span>{run.topLevelMode === 'plan' && run.status === 'done' ? 'ready to execute' : run.publicPhase}</span>
               </div>
             </button>
           );
@@ -1898,7 +1912,7 @@ function App() {
                 <button type="button" className="button compact" onClick={() => setCommandsOpen(true)}>
                   Commands
                 </button>
-                <StatusPill lane={detail.uiLane} />
+                <StatusPill lane={issueLane({ ...detail.status, uiLane: detail.uiLane })} />
               </div>
             </header>
 
