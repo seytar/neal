@@ -705,8 +705,8 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
   });
 
   issues.sort((left, right) => {
-    const leftUpdated = left.workspaceUpdatedAtMs ?? Date.parse(left.currentRun?.updatedAt ?? '') || 0;
-    const rightUpdated = right.workspaceUpdatedAtMs ?? Date.parse(right.currentRun?.updatedAt ?? '') || 0;
+    const leftUpdated = left.workspaceUpdatedAtMs ?? (Date.parse(left.currentRun?.updatedAt ?? '') || 0);
+    const rightUpdated = right.workspaceUpdatedAtMs ?? (Date.parse(right.currentRun?.updatedAt ?? '') || 0);
     return rightUpdated - leftUpdated || left.title.localeCompare(right.title);
   });
 
