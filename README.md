@@ -308,6 +308,19 @@ The server binds only to the loopback interface. State-changing requests require
 an in-memory per-process write token injected into the locally served page.
 There is no arbitrary shell-command endpoint.
 
+Studio changes have a dedicated verification gate:
+
+```bash
+pnpm verify:studio
+```
+
+That gate runs TypeScript checks, lint, the complete Node test suite, the production
+build, Studio presentation/model tests, workspace discovery/history-merge tests,
+render smoke tests, CSS state-contract tests, and an optional real Chromium/Chrome
+smoke test. The browser smoke exercises long-title rendering plus sidebar drag and
+reload persistence when a supported browser is available on `PATH`; otherwise it
+reports an explicit skip without weakening the deterministic unit/render suite.
+
 Refine and execute one or more plans serially:
 
 ```bash
