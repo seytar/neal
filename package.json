@@ -51,9 +51,11 @@
     "dev:link": "pnpm build && npm link",
     "lint": "eslint src test ui/src ui/vite.config.js",
     "start": "tsx src/neal/index.ts",
-    "test": "NEAL_NOTIFY_BIN= node --import tsx --test test/*.test.ts",
+    "test": "NEAL_NOTIFY_BIN= node --import tsx --test test/*.test.ts test/*.test.mjs",
     "typecheck": "node node_modules/typescript-7/bin/tsc --noEmit -p tsconfig.json && node node_modules/typescript-7/bin/tsc -p tsconfig.test.json",
-    "build:ui": "vite build --config ui/vite.config.js"
+    "build:ui": "vite build --config ui/vite.config.js",
+    "test:studio:browser": "pnpm build:ui && node scripts/smoke-ui-browser.mjs",
+    "verify:studio": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && node scripts/smoke-ui-browser.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.52",
