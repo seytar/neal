@@ -40,7 +40,7 @@ export function studioIssueVisualState(issue, index) {
   const lane = run ? issueLane(run) : (issue.readyWithoutRun ? 'ready' : 'unprocessed');
   const latest = index === 0;
   const attention = ['planning', 'running', 'needs_you', 'private_validation', 'failed'].includes(lane);
-  const passive = !latest && Boolean(issue.processed) && !attention;
+  const passive = !latest && !attention && (Boolean(issue.processed) || Boolean(issue.readyWithoutRun));
 
   return {
     lane,
