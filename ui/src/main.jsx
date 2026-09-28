@@ -621,7 +621,7 @@ function LiveActivity({ activity, loading }) {
         <div className="live-state">
           {running || loading ? <span className="pulse" /> : <span className="live-dot" />}
           <div>
-            <span>Current</span>
+            <span>Current step</span>
             <strong>{activity?.phase || (loading ? 'Loading…' : 'n/a')}</strong>
             <small>elapsed {formatElapsed(elapsed)}</small>
           </div>
@@ -1229,10 +1229,19 @@ function ActionPanel({
   if (blocker) {
     const lane = issueLane({ ...status, uiLane: detail.uiLane });
     const actionRequired = lane === 'action_required';
+    const failed = lane === 'failed';
     return (
       <section className={'card ' + (actionRequired ? 'attention' : '')}>
-        <div className="eyebrow">{actionRequired ? 'Action required' : 'Run blocked'}</div>
-        <h2>{actionRequired ? 'Neal stopped and needs an action' : 'Neal cannot continue'}</h2>
+        <div className="eyebrow">
+          {actionRequired ? 'Action required' : failed ? 'Run failed' : 'Run blocked'}
+        </div>
+        <h2>
+          {actionRequired
+            ? 'Neal stopped and needs an action'
+            : failed
+              ? 'Neal failed and cannot continue automatically'
+              : 'Neal cannot continue'}
+        </h2>
 
         <div className="notice">
           <strong>Reason</strong>
