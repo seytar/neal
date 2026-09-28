@@ -1161,7 +1161,7 @@ function normalizeStateV1(parsed: unknown): OrchestrationState {
   return {
     version: 1,
     planDoc: readString(state, 'planDoc'),
-    planDocBackupPath: readNullableString(state, 'planDocBackupPath'),
+    planDocBackupPath: readOptionalNullableString(state, 'planDocBackupPath') ?? null,
     cwd: readString(state, 'cwd'),
     runDir: readString(state, 'runDir'),
     topLevelMode,
