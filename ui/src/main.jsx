@@ -845,21 +845,79 @@ function IssueList({ issues, selectedIssuePath, onSelect, onCommands, onConfig, 
             >
               <div className="run-head">
                 <div className="run-title">{issue.title}</div>
-                <StatusPill lane={run ? issueLane(run) : 'unprocessed'} />
+                <StatusPill lane={run ? issueLane(run) : (issue.readyWithoutRun ? 'ready' : 'unprocessed')} />
               </div>
               <div className="run-meta-line">
                 <span>{run
                   ? issue.runs.length + ' ' + (issue.runs.length === 1 ? 'attempt' : 'attempts')
-                  : 'not processed'}</span>
+                  : (issue.readyWithoutRun ? 'existing plan' : 'not processed')}</span>
                 <span>{run
                   ? (run.topLevelMode === 'plan' && run.status === 'done' ? 'ready to execute' : run.publicPhase)
-                  : issue.displayPath}</span>
+                  : (issue.readyWithoutRun ? 'ready to execute' : issue.displayPath)}</span>
               </div>
             </button>
           );
         })}
       </div>
     </aside>
+  );
+}
+
+function ReadyIssueDetail({ issue, file, onExecute }) {
+  const running = issue?.action?.status === 'running';
+
+  return (
+    <>
+      <header className="topbar">
+        <div className="title-line">
+          <h1>{issue.title}</h1>
+          <span className="run-id">{issue.displayPath}</span>
+        </div>
+        <div className="top-actions">
+          <StatusPill lane="ready" />
+        </div>
+      </header>
+
+      {issue?.action?.status === 'failed' ? (
+        <div className="global-error">Last UI action failed: {issue.action.error}</div>
+      ) : null}
+
+      <section className="card">
+        <div className="section-title">
+          <span>Issue</span>
+          <strong>Executable plan detected</strong>
+        </div>
+        <p className="body-copy">
+          This file already matches Neal's canonical executable plan format, so it can run without another planning pass.
+        </p>
+        <div className="actions">
+          <ActionButton kind="primary" disabled={running} onClick={() => onExecute('shadow')}>
+            {running ? 'Running…' : 'Run Shadow'}
+          </ActionButton>
+          <ActionButton disabled={running} onClick={() => onExecute('normal')}>
+            Run Normal
+          </ActionButton>
+        </div>
+        {running && issue.action?.command ? (
+          <CommandLine command={issue.action.command} label="Running" />
+        ) : null}
+      </section>
+
+      <section className="card artifact-card">
+        {!file ? (
+          <div className="empty-inline">Loading issue…</div>
+        ) : (
+          <>
+            <SourceStrip sources={[{
+              label: 'Issue plan',
+              path: file.path,
+              info: 'Canonical executable Markdown plan discovered from the configured Control Center issues path.',
+            }]} />
+            <MarkdownPreview content={file.content || '(empty)'} />
+          </>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -1917,7 +1975,7 @@ function App() {
   }, [configData?.workspaceRoot]);
 
   const planSelectedIssue = useCallback(async () => {
-    if (!selectedIssue || selectedIssue.currentRun) {
+    if (!selectedIssue || selectedIssue.currentRun || selectedIssue.readyWithoutRun) {
       return;
     }
     try {
@@ -1926,6 +1984,25 @@ function App() {
         body: JSON.stringify({
           path: selectedIssue.displayPath,
           issuesPath,
+        }),
+      });
+      await refreshRuns();
+    } catch (nextError) {
+      setError(nextError.message);
+    }
+  }, [selectedIssue, issuesPath, refreshRuns]);
+
+  const executeSelectedIssue = useCallback(async (mode) => {
+    if (!selectedIssue || selectedIssue.currentRun || !selectedIssue.readyWithoutRun) {
+      return;
+    }
+    try {
+      await api('/api/issues/execute', {
+        method: 'POST',
+        body: JSON.stringify({
+          path: selectedIssue.displayPath,
+          issuesPath,
+          mode,
         }),
       });
       await refreshRuns();
@@ -2064,6 +2141,12 @@ function App() {
 
         {!selectedIssue ? (
           <div className="empty">Select an issue.</div>
+        ) : !selectedIssue.currentRun && selectedIssue.readyWithoutRun ? (
+          <ReadyIssueDetail
+            issue={selectedIssue}
+            file={selectedIssueFile}
+            onExecute={executeSelectedIssue}
+          />
         ) : !selectedIssue.currentRun ? (
           <UnprocessedIssueDetail
             issue={selectedIssue}
