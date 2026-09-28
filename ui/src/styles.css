@@ -76,20 +76,55 @@ button { cursor: pointer; }
 }
 
 .run-item {
+  position: relative;
   width: 100%;
-  padding: 8px;
+  padding: 8px 8px 8px 10px;
   color: inherit;
   text-align: left;
   background: #111821;
   border: 1px solid #222d39;
   border-radius: 7px;
+  box-shadow: inset 2px 0 0 #34404d;
+  transition: opacity .16s ease, background .16s ease, border-color .16s ease, transform .16s ease;
 }
 
-.run-item:hover { border-color: #39485a; }
+.run-item:hover {
+  border-color: #46586d;
+  opacity: 1;
+}
+
+.run-item.latest {
+  background: #151d28;
+  border-color: #40536a;
+}
 
 .run-item.active {
-  background: #151d29;
-  border-color: #5d78dc;
+  background: #182235;
+  border-color: #6683ed;
+  opacity: 1;
+}
+
+.run-item.passive {
+  opacity: .48;
+}
+
+.run-item.passive:hover,
+.run-item.passive.active {
+  opacity: 1;
+}
+
+.run-item.status-planning { box-shadow: inset 3px 0 0 #709cf7; }
+.run-item.status-ready { box-shadow: inset 3px 0 0 #52c99a; }
+.run-item.status-unprocessed { box-shadow: inset 3px 0 0 #7f8c9b; }
+.run-item.status-running { box-shadow: inset 3px 0 0 #42c78d; }
+.run-item.status-needs_you { box-shadow: inset 3px 0 0 #e4ad43; }
+.run-item.status-private_validation { box-shadow: inset 3px 0 0 #9e78e7; }
+.run-item.status-failed { box-shadow: inset 3px 0 0 #e65d70; }
+.run-item.status-done { box-shadow: inset 3px 0 0 #5a9ccc; }
+
+.run-item.status-needs_you,
+.run-item.status-failed {
+  background: #171a20;
 }
 
 .run-head {
@@ -97,6 +132,26 @@ button { cursor: pointer; }
   gap: 7px;
   align-items: center;
   justify-content: space-between;
+}
+
+.run-title-wrap {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+}
+
+.latest-badge {
+  flex: 0 0 auto;
+  padding: 1px 4px;
+  color: #bdcae6;
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+  background: #27344a;
+  border: 1px solid #40516d;
+  border-radius: 999px;
 }
 
 .run-title {
