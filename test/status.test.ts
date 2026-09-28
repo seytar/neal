@@ -321,6 +321,25 @@ async function createFinalCompletionReviewFixture(args: {
   return fixture;
 }
 
+test('buildStatusSnapshot exposes the immutable original plan artifact when present', async () => {
+  const fixture = await createStatusFixture({
+    mutate: (state) => ({
+      ...state,
+      planDocBackupPath: join(state.runDir, 'PLAN_ORIGINAL.md'),
+    }),
+  });
+  await writeFile(join(fixture.runDir, 'PLAN_ORIGINAL.md'), '# Original\n', 'utf8');
+
+  const snapshot = await buildStatusSnapshot({
+    cwd: fixture.cwd,
+    statePath: fixture.statePath,
+  });
+  const output = renderHumanStatusSnapshot(snapshot);
+
+  assert.equal(snapshot.artifacts.originalPlanPath, join(fixture.runDir, 'PLAN_ORIGINAL.md'));
+  assert.ok(output.includes(`- Original plan: ${join(fixture.runDir, 'PLAN_ORIGINAL.md')}`));
+});
+
 test('buildStatusSnapshot reports healthy recent coder activity and artifacts', async () => {
   const now = new Date('2026-04-25T18:15:52.082Z');
   const fixture = await createStatusFixture({
