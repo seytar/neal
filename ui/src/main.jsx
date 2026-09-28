@@ -833,19 +833,34 @@ function IssueList({ issues, selectedIssuePath, onSelect, onCommands, onConfig, 
       <div className="run-list">
         {issues.length === 0 ? (
           <div className="muted">No issues yet.</div>
-        ) : issues.map((issue) => {
+        ) : issues.map((issue, index) => {
           const run = issue.currentRun;
           const active = issue.planDoc === selectedIssuePath;
+          const lane = run ? issueLane(run) : (issue.readyWithoutRun ? 'ready' : 'unprocessed');
+          const latest = index === 0;
+          const attention = ['planning', 'running', 'needs_you', 'private_validation', 'failed'].includes(lane);
+          const passive = !latest && issue.processed && !attention;
+          const className = [
+            'run-item',
+            'status-' + lane,
+            active ? 'active' : '',
+            latest ? 'latest' : '',
+            passive ? 'passive' : '',
+          ].filter(Boolean).join(' ');
+
           return (
             <button
               type="button"
-              className={'run-item ' + (active ? 'active' : '')}
+              className={className}
               key={issue.key}
               onClick={() => onSelect(issue)}
             >
               <div className="run-head">
-                <div className="run-title">{issue.title}</div>
-                <StatusPill lane={run ? issueLane(run) : (issue.readyWithoutRun ? 'ready' : 'unprocessed')} />
+                <div className="run-title-wrap">
+                  {latest ? <span className="latest-badge">Latest</span> : null}
+                  <div className="run-title">{issue.title}</div>
+                </div>
+                <StatusPill lane={lane} />
               </div>
               <div className="run-meta-line">
                 <span>{run
