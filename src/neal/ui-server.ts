@@ -649,11 +649,13 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
     title: string;
     source: 'workspace' | 'history';
     executable: boolean;
+    workspaceUpdatedAtMs: number | null;
     runs: typeof runs;
   }>();
 
   for (const file of discovered.files) {
     const key = resolve(file);
+    const fileStat = await stat(file);
     byPlan.set(key, {
       key,
       planDoc: file,
@@ -661,6 +663,7 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
       title: await readUiIssueTitle(file) ?? file.split(/[\\/]/).at(-1) ?? file,
       source: 'workspace',
       executable: await isUiExecutablePlan(file),
+      workspaceUpdatedAtMs: fileStat.mtimeMs,
       runs: [],
     });
   }
@@ -682,6 +685,7 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
       title: run.uiTitle || run.planDoc.split(/[\\/]/).at(-1) || run.planDoc,
       source: 'history',
       executable: true,
+      workspaceUpdatedAtMs: null,
       runs: [run],
     });
   }
@@ -701,12 +705,9 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
   });
 
   issues.sort((left, right) => {
-    if (left.processed !== right.processed) {
-      return left.processed ? 1 : -1;
-    }
-    const leftUpdated = left.currentRun?.updatedAt ?? '';
-    const rightUpdated = right.currentRun?.updatedAt ?? '';
-    return rightUpdated.localeCompare(leftUpdated) || left.title.localeCompare(right.title);
+    const leftUpdated = left.workspaceUpdatedAtMs ?? Date.parse(left.currentRun?.updatedAt ?? '') || 0;
+    const rightUpdated = right.workspaceUpdatedAtMs ?? Date.parse(right.currentRun?.updatedAt ?? '') || 0;
+    return rightUpdated - leftUpdated || left.title.localeCompare(right.title);
   });
 
   return {
