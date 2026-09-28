@@ -139,6 +139,7 @@ button { cursor: pointer; }
 
 .pill.planning { color: #a7c7ff; background: #1d2b43; }
 .pill.ready { color: #8fe0c0; background: #17332a; }
+.pill.unprocessed { color: #c7d0db; background: #252d36; }
 .pill.running { color: #77e2b6; background: #132f28; }
 .pill.needs_you { color: #ffd37a; background: #3b2b11; }
 .pill.private_validation { color: #c8a9ff; background: #2d2344; }
