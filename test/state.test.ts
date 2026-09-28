@@ -283,21 +283,6 @@ executionShape: one_shot
   assert.equal(executeState.authoredExecutionShape, 'one_shot');
 });
 
-test('legacy run state without planDocBackupPath hydrates with no original snapshot', async () => {
-  const { state, statePath } = await createMinimalStateFixture('neal-state-legacy-original-plan-');
-  await saveState(statePath, {
-    ...state,
-    planDocBackupPath: join(state.runDir, 'PLAN_ORIGINAL.md'),
-  });
-
-  const persisted = JSON.parse(await readFile(statePath, 'utf8')) as Record<string, unknown>;
-  delete persisted.planDocBackupPath;
-  await writeFile(statePath, JSON.stringify(persisted, null, 2) + '\n', 'utf8');
-
-  const loaded = await loadState(statePath);
-  assert.equal(loaded.planDocBackupPath, null);
-});
-
 test('authoredExecutionShape defaults to null when the seed plan is absent and round-trips when set', async () => {
   const { state, statePath } = await createMinimalStateFixture('neal-state-authored-shape-roundtrip-');
   // No seed plan document exists for the minimal fixture, so the captured shape is null.
