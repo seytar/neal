@@ -47,7 +47,9 @@ function smokeScript(mode) {
       }
       const runList = document.querySelector('.run-list');
       if (runList) {
-        document.body.dataset.smokeIssueListOverflowY = getComputedStyle(runList).overflowY;
+        const runListStyle = getComputedStyle(runList);
+        document.body.dataset.smokeIssueListOverflowY = runListStyle.overflowY;
+        document.body.dataset.smokeIssueListScrollbarColor = runListStyle.scrollbarColor || '';
       }
       document.body.dataset.smokeBodyOverflow = getComputedStyle(document.body).overflow;
   `;
@@ -265,6 +267,7 @@ try {
   assert.match(first, /studio/i);
   assert.match(first, /data-smoke-title-white-space="normal"/);
   assert.match(first, /data-smoke-issue-list-overflow-y="auto"/);
+  assert.match(first, /data-smoke-issue-list-scrollbar-color="[^"]+"/);
   assert.match(first, /data-smoke-body-overflow="hidden"/);
   assert.match(first, /data-smoke-stored-width="440"/);
 
