@@ -23,6 +23,25 @@ test('parseWorktreeStatusLine extracts paths from short status entries', () => {
   assert.equal(parseWorktreeStatusLine(''), null);
 });
 
+test('parseWorktreeStatusLine decodes git-quoted paths with spaces', () => {
+  assert.deepEqual(parseWorktreeStatusLine(' M "documentation/issues/28-Bodycam Location GeoJSON - MapLibre Client-side Clustering.md"'), {
+    raw: ' M "documentation/issues/28-Bodycam Location GeoJSON - MapLibre Client-side Clustering.md"',
+    pathText: '"documentation/issues/28-Bodycam Location GeoJSON - MapLibre Client-side Clustering.md"',
+    paths: ['documentation/issues/28-Bodycam Location GeoJSON - MapLibre Client-side Clustering.md'],
+  });
+});
+
+test('filterAllowedDirtyPathStatus recognizes an allowed absolute plan path when git quotes it', () => {
+  const status = ' M "documentation/issues/28-Bodycam Location GeoJSON - MapLibre Client-side Clustering.md"';
+  const planPath = '/repo/documentation/issues/28-Bodycam Location GeoJSON - MapLibre Client-side Clustering.md';
+
+  assert.equal(filterAllowedDirtyPathStatus('/repo', status, [planPath]), '');
+  assert.equal(
+    filterAllowedDirtyPathStatus('/repo', ' M "documentation/issues/other file.md"', [planPath]),
+    ' M "documentation/issues/other file.md"',
+  );
+});
+
 test('getLikelyScratchLeakPaths classifies only obvious project-root scratch paths', () => {
   const statusOutput = [
     '?? build_review/',
