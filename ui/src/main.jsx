@@ -1717,7 +1717,8 @@ function App() {
     void api('/api/commands')
       .then(setCommandCatalog)
       .catch((nextError) => setError(nextError.message));
-  }, []);
+    void refreshConfig();
+  }, [refreshConfig]);
 
   useEffect(() => {
     const workspaceRoot = configData?.workspaceRoot;
@@ -1988,13 +1989,13 @@ function App() {
     setArtifactViewMode('preview');
   }, []);
 
-  if (!selectedRunId && runs.length === 0 && !error) {
+  if (!selectedIssuePath && issues.length === 0 && !error) {
     return (
       <div className="layout">
         <IssueList
-          runs={runs}
-          selectedRunId={selectedRunId}
-          onSelect={setSelectedRunId}
+          issues={issues}
+          selectedIssuePath={selectedIssuePath}
+          onSelect={selectIssue}
           onCommands={() => setCommandsOpen(true)}
           onConfig={openConfig}
           onNewRun={openNewRun}
@@ -2011,6 +2012,8 @@ function App() {
           config={configData}
           loading={configLoading}
           onReload={refreshConfig}
+          issuesPath={issuesPath}
+          onIssuesPathChange={applyIssuesPath}
         />
 
       <NewIssueModal
@@ -2022,11 +2025,12 @@ function App() {
         setDescription={setNewRunDescription}
         mode={newRunMode}
         setMode={setNewRunMode}
+        issuesPath={issuesPath}
         action={newRunAction}
         onStart={startNewRun}
       />
 
-      <main className="main"><div className="empty">No issues yet. Create one from the sidebar.</div></main>
+      <main className="main"><div className="empty">No issues found under <code>{issuesPath}</code>, and no prior Neal run history exists.</div></main>
       </div>
     );
   }
@@ -2034,9 +2038,9 @@ function App() {
   return (
     <div className="layout">
       <IssueList
-        runs={runs}
-        selectedRunId={selectedRunId}
-        onSelect={setSelectedRunId}
+        issues={issues}
+        selectedIssuePath={selectedIssuePath}
+        onSelect={selectIssue}
         onCommands={() => setCommandsOpen(true)}
         onConfig={openConfig}
         onNewRun={openNewRun}
@@ -2054,6 +2058,8 @@ function App() {
         config={configData}
         loading={configLoading}
         onReload={refreshConfig}
+        issuesPath={issuesPath}
+        onIssuesPathChange={applyIssuesPath}
       />
 
       <NewIssueModal
@@ -2065,6 +2071,7 @@ function App() {
         setDescription={setNewRunDescription}
         mode={newRunMode}
         setMode={setNewRunMode}
+        issuesPath={issuesPath}
         action={newRunAction}
         onStart={startNewRun}
       />
@@ -2072,7 +2079,15 @@ function App() {
       <main className="main">
         {error ? <div className="global-error">{error}</div> : null}
 
-        {!detail ? (
+        {!selectedIssue ? (
+          <div className="empty">Select an issue.</div>
+        ) : !selectedIssue.currentRun ? (
+          <UnprocessedIssueDetail
+            issue={selectedIssue}
+            file={selectedIssueFile}
+            onPlan={planSelectedIssue}
+          />
+        ) : !detail ? (
           <div className="empty">Loading run...</div>
         ) : (
           <>
