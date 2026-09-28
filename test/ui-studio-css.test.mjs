@@ -32,3 +32,22 @@ test('Studio CSS exposes a dedicated resize handle and passive state', () => {
   assert.match(css, /cursor:\s*col-resize/);
   assert.match(css, /\.run-item\.passive\s*\{/);
 });
+
+
+test('Studio keeps viewport fixed while the issue list scrolls independently', () => {
+  const bodyRule = css.match(/body\s*\{([\s\S]*?)\}/)?.[1] || '';
+  const layoutRule = css.match(/\.layout\s*\{([\s\S]*?)\}/)?.[1] || '';
+  const sidebarRule = css.match(/\.sidebar\s*\{([\s\S]*?)\}/)?.[1] || '';
+  const runListRule = css.match(/\.run-list\s*\{([\s\S]*?)\}/)?.[1] || '';
+  const mainRule = css.match(/\.main\s*\{([\s\S]*?)\}/)?.[1] || '';
+
+  assert.match(bodyRule, /overflow:\s*hidden/);
+  assert.match(layoutRule, /height:\s*100vh/);
+  assert.match(sidebarRule, /overflow:\s*hidden/);
+  assert.match(sidebarRule, /flex-direction:\s*column/);
+  assert.match(runListRule, /overflow-y:\s*auto/);
+  assert.match(runListRule, /flex:\s*1\s+1\s+auto/);
+  assert.match(runListRule, /overscroll-behavior:\s*contain/);
+  assert.match(mainRule, /height:\s*100vh/);
+  assert.match(mainRule, /overflow:\s*auto/);
+});
