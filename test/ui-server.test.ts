@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { classifyUiRun } from '../src/neal/ui-server.js';
+import { classifyUiRun, getUiIssueTitleFromPlanContent } from '../src/neal/ui-server.js';
 
 const base = {
   phase: 'coder_scope' as const,
@@ -85,4 +85,20 @@ test('UI lane treats resumable pauses as operator work and terminal states disti
   );
 
   assert.equal(classifyUiRun(base), 'running');
+});
+
+
+test('UI issue titles come from the first Markdown H1', () => {
+  assert.equal(
+    getUiIssueTitleFromPlanContent([
+      '# Issue 27 location log verification',
+      '',
+      '## Objective',
+      '',
+      'Keep the existing backend behavior.',
+    ].join('\n')),
+    'Issue 27 location log verification',
+  );
+
+  assert.equal(getUiIssueTitleFromPlanContent('## Objective\n\nNo H1 here.'), null);
 });
