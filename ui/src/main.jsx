@@ -424,7 +424,7 @@ function ConfigPanel({ open, onClose, config, loading, onReload, issuesPath, onI
             </div>
 
             <section className="config-section">
-              <div className="config-section-title">Control Center</div>
+              <div className="config-section-title">Neal Studio</div>
               <ConfigField
                 label="Issues path"
                 hint="Repository-relative folder scanned recursively for Markdown issues. Existing run history remains visible even when it is outside this folder."
@@ -951,7 +951,7 @@ function ReadyIssueDetail({ issue, file, onExecute }) {
             <SourceStrip sources={[{
               label: 'Issue plan',
               path: file.path,
-              info: 'Canonical executable Markdown plan discovered from the configured Control Center issues path.',
+              info: 'Canonical executable Markdown plan discovered from the configured Neal Studio issues path.',
             }]} />
             <MarkdownPreview content={file.content || '(empty)'} />
           </>
@@ -1006,7 +1006,7 @@ function UnprocessedIssueDetail({ issue, file, onPlan }) {
             <SourceStrip sources={[{
               label: 'Issue file',
               path: file.path,
-              info: 'Unprocessed Markdown issue discovered from the configured Control Center issues path.',
+              info: 'Unprocessed Markdown issue discovered from the configured Neal Studio issues path.',
             }]} />
             <MarkdownPreview content={file.content || '(empty)'} />
           </>
