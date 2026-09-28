@@ -147,23 +147,6 @@ export function classifyUiRun(run: UiClassifiableRun): NealUiLane {
   return 'running';
 }
 
-async function classifyUiListRun(cwd: string, run: NealStatusListRun): Promise<NealUiLane> {
-  if (
-    run.status === 'blocked' ||
-    run.status === 'failed' ||
-    run.effectiveStatus === 'blocked' ||
-    run.effectiveStatus === 'failed'
-  ) {
-    const status = await buildStatusSnapshot({
-      cwd,
-      statePath: run.statePath,
-    });
-    return classifyUiRun(status);
-  }
-
-  return classifyUiRun(run);
-}
-
 function json(res: ServerResponse, statusCode: number, body: unknown) {
   const payload = JSON.stringify(body);
   res.writeHead(statusCode, {
@@ -751,14 +734,14 @@ export function mergeUiIssuesForDisplay<T extends UiIssueRunLike>(
 
 async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | null | undefined) {
   const [snapshot, discovered] = await Promise.all([
-    buildStatusListSnapshot({ cwd: ctx.cwd }),
+    buildStatusListSnapshot({ cwd: ctx.cwd, includeResumeDecision: true }),
     listUiIssueFiles(ctx.cwd, issuesPath),
   ]);
 
   const runs = await Promise.all(snapshot.runs.map(async (run) => ({
     ...run,
     uiTitle: await readUiIssueTitle(run.planDoc),
-    uiLane: await classifyUiListRun(ctx.cwd, run),
+    uiLane: classifyUiRun(run),
     action: ctx.actions.get(run.runId) ?? null,
   })));
 
@@ -1306,7 +1289,7 @@ async function handleApi(
   }
 
   if (req.method === 'GET' && pathname === '/api/runs') {
-    const snapshot = await buildStatusListSnapshot({ cwd: ctx.cwd });
+    const snapshot = await buildStatusListSnapshot({ cwd: ctx.cwd, includeResumeDecision: true });
     const titleByPlan = new Map<string, Promise<string | null>>();
     const getTitle = (planDoc: string) => {
       const key = resolve(planDoc);
@@ -1321,7 +1304,7 @@ async function handleApi(
     const runs = await Promise.all(snapshot.runs.map(async (run) => ({
       ...run,
       uiTitle: await getTitle(run.planDoc),
-      uiLane: await classifyUiListRun(ctx.cwd, run),
+      uiLane: classifyUiRun(run),
       action: ctx.actions.get(run.runId) ?? null,
     })));
     json(res, 200, {
