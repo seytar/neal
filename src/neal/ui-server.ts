@@ -132,6 +132,8 @@ export function classifyUiRun(run: UiClassifiableRun): NealUiLane {
     run.pendingOperatorGuidance ||
     run.manualGate !== null ||
     run.effectiveStatus === 'paused' ||
+    run.effectiveStatus === 'waiting_for_operator' ||
+    run.effectiveStatus === 'waiting_for_manual_gate' ||
     run.resumeDecision?.kind === 'continue' ||
     run.resumeDecision?.kind === 'needs_message' ||
     run.resumeDecision?.kind === 'pending_message'
