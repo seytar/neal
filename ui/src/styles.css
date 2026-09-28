@@ -10,6 +10,55 @@
   --studio-border: #223043;
   --studio-border-strong: #38516f;
   --studio-text-muted: #8291a4;
+  --studio-scroll-track: rgba(10, 15, 22, .72);
+  --studio-scroll-thumb: #33465c;
+  --studio-scroll-thumb-hover: #4d6684;
+  --studio-scroll-thumb-active: #6483aa;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--studio-scroll-thumb) var(--studio-scroll-track);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--studio-scroll-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 34px;
+  background: var(--studio-scroll-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--studio-scroll-thumb-hover);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--studio-scroll-thumb-active);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--studio-scroll-track);
+}
+
+.run-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.run-list::-webkit-scrollbar-thumb {
+  border-width: 2px;
 }
 
 * { box-sizing: border-box; }
