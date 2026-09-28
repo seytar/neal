@@ -259,12 +259,14 @@ body.studio-resizing .sidebar-resizer::after {
 .run-item.status-ready { box-shadow: inset 3px 0 0 #52c99a; }
 .run-item.status-unprocessed { box-shadow: inset 3px 0 0 #7f8c9b; }
 .run-item.status-running { box-shadow: inset 3px 0 0 #42c78d; }
-.run-item.status-needs_you { box-shadow: inset 3px 0 0 #e4ad43; }
+.run-item.status-action_required { box-shadow: inset 3px 0 0 #e4ad43; }
 .run-item.status-private_validation { box-shadow: inset 3px 0 0 #9e78e7; }
+.run-item.status-blocked { box-shadow: inset 3px 0 0 #d1844a; }
 .run-item.status-failed { box-shadow: inset 3px 0 0 #e65d70; }
 .run-item.status-done { box-shadow: inset 3px 0 0 #5a9ccc; }
 
-.run-item.status-needs_you,
+.run-item.status-action_required,
+.run-item.status-blocked,
 .run-item.status-failed {
   background: #171a20;
 }
@@ -344,8 +346,9 @@ body.studio-resizing .sidebar-resizer::after {
 .pill.ready { color: #94e4c5; background: #16362b; border-color: #245541; }
 .pill.unprocessed { color: #cad3de; background: #262f39; border-color: #394553; }
 .pill.running { color: #83e6bc; background: #123329; border-color: #205240; }
-.pill.needs_you { color: #ffd67f; background: #3d2c10; border-color: #60471d; }
+.pill.action_required { color: #ffd67f; background: #3d2c10; border-color: #60471d; }
 .pill.private_validation { color: #cdb2ff; background: #302449; border-color: #4c3970; }
+.pill.blocked { color: #ffc38f; background: #3a281b; border-color: #62422b; }
 .pill.failed { color: #ffabb5; background: #3e1c23; border-color: #612d37; }
 .pill.done { color: #8fcfff; background: #173349; border-color: #27506c; }
 
