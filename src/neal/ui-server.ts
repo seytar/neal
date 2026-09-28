@@ -1023,8 +1023,10 @@ async function readArtifact(path: string) {
   return readFile(path, 'utf8');
 }
 
-function artifactPathFor(status: NealStatusSnapshot, kind: string) {
+export function artifactPathFor(status: NealStatusSnapshot, kind: string) {
   switch (kind) {
+    case 'original':
+      return status.artifacts.originalPlanPath;
     case 'plan':
       return status.planDoc;
     case 'progress':
