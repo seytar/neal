@@ -39,7 +39,7 @@ test('UI lane highlights operator guidance and manual gates', () => {
       effectiveStatus: 'waiting_for_operator',
       waitingForOperatorGuidance: true,
     }),
-    'needs_you',
+    'action_required',
   );
 
   assert.equal(
@@ -58,7 +58,7 @@ test('UI lane highlights operator guidance and manual gates', () => {
         resumeCommand: 'neal resume --run run-1',
       },
     }),
-    'needs_you',
+    'action_required',
   );
 });
 
@@ -69,7 +69,30 @@ test('UI lane treats resumable pauses as operator work and terminal states disti
       status: 'paused',
       effectiveStatus: 'paused',
     }),
-    'needs_you',
+    'action_required',
+  );
+
+  assert.equal(
+    classifyUiRun({
+      ...base,
+      status: 'blocked',
+      effectiveStatus: 'blocked',
+    }),
+    'blocked',
+  );
+
+  assert.equal(
+    classifyUiRun({
+      ...base,
+      status: 'blocked',
+      effectiveStatus: 'blocked',
+      resumeDecision: {
+        kind: 'continue',
+        reason: 'The blocked phase can be restored.',
+        resumeCommand: 'neal resume --run run-1',
+      },
+    }),
+    'action_required',
   );
 
   assert.equal(
