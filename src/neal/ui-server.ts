@@ -46,6 +46,7 @@ import { runShadowCommand } from './commands/shadow.js';
 import { resolveRunStatePath } from './run-registry.js';
 import { listRegisteredProviderDefinitions } from './providers/registry.js';
 import { getExecutionPlanPath, getExecutionPlanScopeCount } from './scopes.js';
+import { validatePlanDocument } from './plan-validation.js';
 import { loadState } from './state.js';
 import { renderStatusFooterLine } from './status-footer.js';
 import {
@@ -581,6 +582,14 @@ async function readUiIssueTitle(planDoc: string) {
   }
 }
 
+async function isUiExecutablePlan(planDoc: string) {
+  try {
+    return validatePlanDocument(await readFile(planDoc, 'utf8')).ok;
+  } catch {
+    return false;
+  }
+}
+
 async function listUiIssueFiles(cwd: string, issuesPath: string | null | undefined) {
   const configured = resolveUiIssuesPath(cwd, issuesPath);
   const files: string[] = [];
@@ -639,6 +648,7 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
     displayPath: string;
     title: string;
     source: 'workspace' | 'history';
+    executable: boolean;
     runs: typeof runs;
   }>();
 
@@ -650,6 +660,7 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
       displayPath: relative(ctx.cwd, file) || file,
       title: await readUiIssueTitle(file) ?? file.split(/[\\/]/).at(-1) ?? file,
       source: 'workspace',
+      executable: await isUiExecutablePlan(file),
       runs: [],
     });
   }
@@ -670,6 +681,7 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
       displayPath: relative(ctx.cwd, run.planDoc) || run.planDoc,
       title: run.uiTitle || run.planDoc.split(/[\\/]/).at(-1) || run.planDoc,
       source: 'history',
+      executable: true,
       runs: [run],
     });
   }
@@ -683,6 +695,7 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
       ...issue,
       currentRun,
       processed: currentRun !== null,
+      readyWithoutRun: currentRun === null && issue.executable,
       action,
     };
   });
@@ -1141,6 +1154,41 @@ async function handleApi(
       await runNewRunCommand(['plan', displayPath]);
       return {
         resultRunId: await findNewestRunForPlan(ctx.cwd, planDoc, 'plan'),
+        planDoc,
+      };
+    });
+    action.planDoc = planDoc;
+    ctx.actions.set(actionKey, action);
+    json(res, 202, { ...action, displayPath });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/issues/execute') {
+    requireWriteToken(req, ctx.token);
+    const body = await readJsonBody(req);
+    const issuePath = requireString(body, 'path');
+    const issuesPath = optionalString(body, 'issuesPath');
+    const mode = requireString(body, 'mode');
+    if (mode !== 'shadow' && mode !== 'normal') {
+      throw new UiHttpError(400, 'mode must be shadow or normal.');
+    }
+    const planDoc = resolveUiIssueFile(ctx.cwd, issuesPath, issuePath);
+    if (!(await isUiExecutablePlan(planDoc))) {
+      throw new UiHttpError(400, 'Issue is not a canonical executable Neal plan yet.');
+    }
+    const displayPath = relative(ctx.cwd, planDoc) || planDoc;
+    const actionKey = `__issue_execute__:${displayPath}`;
+    const command = mode === 'shadow'
+      ? `neal shadow execute ${shellQuoteForDisplay(displayPath)}`
+      : `neal execute ${shellQuoteForDisplay(displayPath)}`;
+    const action = startAction(ctx, actionKey, mode === 'shadow' ? 'Execute Shadow issue' : 'Execute issue', command, async () => {
+      if (mode === 'shadow') {
+        await runShadowCommand(['shadow', 'execute', displayPath]);
+      } else {
+        await runNewRunCommand(['execute', displayPath]);
+      }
+      return {
+        resultRunId: await findNewestRunForPlan(ctx.cwd, planDoc, 'execute'),
         planDoc,
       };
     });
