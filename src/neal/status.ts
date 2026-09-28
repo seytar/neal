@@ -139,6 +139,7 @@ export type NealStatusSnapshot = {
     truncated: boolean;
   };
   artifacts: {
+    originalPlanPath: string | null;
     runStatePath: string;
     eventsPath: string;
     runNarrativeMarkdownPath: string;
@@ -468,6 +469,7 @@ export async function buildStatusSnapshot(args: {
       truncated: tail.truncated,
     },
     artifacts: {
+      originalPlanPath: state.planDocBackupPath,
       runStatePath: getRunStatePath(state.runDir),
       eventsPath,
       runNarrativeMarkdownPath: join(state.runDir, 'RUN_NARRATIVE.md'),
@@ -633,6 +635,7 @@ export function renderHumanStatusSnapshot(snapshot: NealStatusSnapshot): string 
   lines.push(
     '',
     '## Artifacts',
+    `- Original plan: ${snapshot.artifacts.originalPlanPath ?? 'unavailable'}`,
     `- Run state: ${snapshot.artifacts.runStatePath}`,
     `- Events: ${snapshot.artifacts.eventsPath}`,
     `- Run narrative: ${snapshot.artifacts.runNarrativeMarkdownPath}`,
