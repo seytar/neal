@@ -582,7 +582,7 @@ async function readUiIssueTitle(planDoc: string) {
   }
 }
 
-async function isUiExecutablePlan(planDoc: string) {
+export async function isUiExecutablePlan(planDoc: string) {
   try {
     return validatePlanDocument(await readFile(planDoc, 'utf8')).ok;
   } catch {
@@ -590,7 +590,7 @@ async function isUiExecutablePlan(planDoc: string) {
   }
 }
 
-async function listUiIssueFiles(cwd: string, issuesPath: string | null | undefined) {
+export async function listUiIssueFiles(cwd: string, issuesPath: string | null | undefined) {
   const configured = resolveUiIssuesPath(cwd, issuesPath);
   const files: string[] = [];
   const visit = async (directory: string): Promise<void> => {
@@ -629,19 +629,43 @@ async function listUiIssueFiles(cwd: string, issuesPath: string | null | undefin
   };
 }
 
-async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | null | undefined) {
-  const [snapshot, discovered] = await Promise.all([
-    buildStatusListSnapshot({ cwd: ctx.cwd }),
-    listUiIssueFiles(ctx.cwd, issuesPath),
-  ]);
+export type UiDiscoveredIssueEntry = {
+  key: string;
+  planDoc: string;
+  displayPath: string;
+  title: string;
+  source: 'workspace';
+  executable: boolean;
+  workspaceUpdatedAtMs: number;
+};
 
-  const runs = await Promise.all(snapshot.runs.map(async (run) => ({
-    ...run,
-    uiTitle: await readUiIssueTitle(run.planDoc),
-    uiLane: classifyUiRun(run),
-    action: ctx.actions.get(run.runId) ?? null,
-  })));
+export type UiIssueRunLike = {
+  planDoc: string;
+  updatedAt: string;
+  uiTitle?: string | null;
+};
 
+export async function buildUiDiscoveredIssueEntries(cwd: string, files: string[]) {
+  return Promise.all(files.map(async (file): Promise<UiDiscoveredIssueEntry> => {
+    const fileStat = await stat(file);
+    return {
+      key: resolve(file),
+      planDoc: file,
+      displayPath: relative(cwd, file) || file,
+      title: await readUiIssueTitle(file) ?? file.split(/[\\/]/).at(-1) ?? file,
+      source: 'workspace',
+      executable: await isUiExecutablePlan(file),
+      workspaceUpdatedAtMs: fileStat.mtimeMs,
+    };
+  }));
+}
+
+export function mergeUiIssuesForDisplay<T extends UiIssueRunLike>(
+  cwd: string,
+  discoveredEntries: UiDiscoveredIssueEntry[],
+  runs: T[],
+  actions: NealUiActionState[] = [],
+) {
   const byPlan = new Map<string, {
     key: string;
     planDoc: string;
@@ -650,20 +674,12 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
     source: 'workspace' | 'history';
     executable: boolean;
     workspaceUpdatedAtMs: number | null;
-    runs: typeof runs;
+    runs: T[];
   }>();
 
-  for (const file of discovered.files) {
-    const key = resolve(file);
-    const fileStat = await stat(file);
-    byPlan.set(key, {
-      key,
-      planDoc: file,
-      displayPath: relative(ctx.cwd, file) || file,
-      title: await readUiIssueTitle(file) ?? file.split(/[\\/]/).at(-1) ?? file,
-      source: 'workspace',
-      executable: await isUiExecutablePlan(file),
-      workspaceUpdatedAtMs: fileStat.mtimeMs,
+  for (const discovered of discoveredEntries) {
+    byPlan.set(discovered.key, {
+      ...discovered,
       runs: [],
     });
   }
@@ -673,15 +689,12 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
     const issue = byPlan.get(key);
     if (issue) {
       issue.runs.push(run);
-      if (!issue.title && run.uiTitle) {
-        issue.title = run.uiTitle;
-      }
       continue;
     }
     byPlan.set(key, {
       key,
       planDoc: run.planDoc,
-      displayPath: relative(ctx.cwd, run.planDoc) || run.planDoc,
+      displayPath: relative(cwd, run.planDoc) || run.planDoc,
       title: run.uiTitle || run.planDoc.split(/[\\/]/).at(-1) || run.planDoc,
       source: 'history',
       executable: true,
@@ -692,7 +705,7 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
 
   const issues = [...byPlan.values()].map((issue) => {
     const currentRun = issue.runs[0] ?? null;
-    const action = [...ctx.actions.values()].find((candidate) =>
+    const action = actions.find((candidate) =>
       candidate.planDoc && resolve(candidate.planDoc) === resolve(issue.planDoc)
     ) ?? null;
     return {
@@ -709,6 +722,30 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
     const rightUpdated = right.workspaceUpdatedAtMs ?? (Date.parse(right.currentRun?.updatedAt ?? '') || 0);
     return rightUpdated - leftUpdated || left.title.localeCompare(right.title);
   });
+
+  return issues;
+}
+
+async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | null | undefined) {
+  const [snapshot, discovered] = await Promise.all([
+    buildStatusListSnapshot({ cwd: ctx.cwd }),
+    listUiIssueFiles(ctx.cwd, issuesPath),
+  ]);
+
+  const runs = await Promise.all(snapshot.runs.map(async (run) => ({
+    ...run,
+    uiTitle: await readUiIssueTitle(run.planDoc),
+    uiLane: classifyUiRun(run),
+    action: ctx.actions.get(run.runId) ?? null,
+  })));
+
+  const discoveredEntries = await buildUiDiscoveredIssueEntries(ctx.cwd, discovered.files);
+  const issues = mergeUiIssuesForDisplay(
+    ctx.cwd,
+    discoveredEntries,
+    runs,
+    [...ctx.actions.values()],
+  );
 
   return {
     issuesPath: discovered.displayPath,
