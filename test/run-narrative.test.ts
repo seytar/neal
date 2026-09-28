@@ -1021,6 +1021,7 @@ function sampleStatusSnapshot(
       truncated: false,
     },
     artifacts: {
+      originalPlanPath: fixture.state.planDocBackupPath,
       runStatePath: fixture.statePath,
       eventsPath: join(fixture.runDir, 'events.ndjson'),
       runNarrativeMarkdownPath: join(fixture.runDir, 'RUN_NARRATIVE.md'),
