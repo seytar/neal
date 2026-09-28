@@ -536,11 +536,14 @@ async function buildUiTerminalFooterLine(status: NealStatusSnapshot) {
   });
 }
 
+export function getUiIssueTitleFromPlanContent(content: string) {
+  const heading = content.match(/^#\s+(.+?)\s*$/m)?.[1]?.trim();
+  return heading || null;
+}
+
 async function readUiIssueTitle(planDoc: string) {
   try {
-    const content = await readFile(planDoc, 'utf8');
-    const heading = content.match(/^#\s+(.+?)\s*$/m)?.[1]?.trim();
-    return heading || null;
+    return getUiIssueTitleFromPlanContent(await readFile(planDoc, 'utf8'));
   } catch {
     return null;
   }
