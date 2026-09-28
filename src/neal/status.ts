@@ -258,6 +258,7 @@ export type NealStatusListRun = {
   createdAt: string;
   updatedAt: string;
   nextAction: string;
+  resumeDecision?: ResumeDecision;
   artifacts: NealStatusSnapshot['artifacts'];
 };
 
@@ -488,6 +489,7 @@ export async function buildStatusSnapshot(args: {
 export async function buildStatusListSnapshot(args: {
   cwd: string;
   now?: Date;
+  includeResumeDecision?: boolean;
 }): Promise<NealStatusListSnapshot> {
   const cwd = resolve(args.cwd);
   const runs = await listRuns(cwd);
@@ -534,6 +536,7 @@ export async function buildStatusListSnapshot(args: {
         createdAt: run.createdAt,
         updatedAt: run.updatedAt,
         nextAction: snapshot.nextAction,
+        ...(args.includeResumeDecision ? { resumeDecision: snapshot.resumeDecision } : {}),
         artifacts: snapshot.artifacts,
       };
     }),
