@@ -43,7 +43,9 @@ export function StudioIssueCard({
           ? issue.runs.length + ' ' + (issue.runs.length === 1 ? 'attempt' : 'attempts')
           : (issue.readyWithoutRun ? 'existing plan' : 'not processed')}</span>
         <span>{run
-          ? (run.topLevelMode === 'plan' && run.status === 'done' ? 'ready to execute' : run.publicPhase)
+          ? (run.topLevelMode === 'plan' && run.status === 'done'
+              ? 'ready to execute'
+              : 'step: ' + run.publicPhase)
           : (issue.readyWithoutRun ? 'ready to execute' : issue.displayPath)}</span>
       </div>
     </button>
