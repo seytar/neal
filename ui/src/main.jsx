@@ -3,20 +3,21 @@ import { createRoot } from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import {
+  DEFAULT_SIDEBAR_WIDTH,
+  clampSidebarWidth,
+  issueLane,
+  laneLabel,
+  studioIssueVisualState,
+  studioSidebarStorageKey,
+} from './studio-model.js';
+
 import './styles.css';
 
 const WRITE_TOKEN = window.__NEAL_UI_TOKEN__ || '';
 const POLL_MS = 2500;
 const ACTIVITY_POLL_MS = 1000;
 const NEW_RUN_POLL_MS = 500;
-const DEFAULT_SIDEBAR_WIDTH = 340;
-const MIN_SIDEBAR_WIDTH = 280;
-const MAX_SIDEBAR_WIDTH = 560;
-
-function clampSidebarWidth(value) {
-  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
-}
-
 async function api(path, options = {}) {
   const headers = {
     Accept: 'application/json',
@@ -44,31 +45,6 @@ async function api(path, options = {}) {
 function basename(path) {
   const parts = String(path || '').split('/').filter(Boolean);
   return parts.at(-1) || String(path || 'Unknown plan');
-}
-
-function issueLane(run) {
-  if (run?.topLevelMode === 'plan') {
-    if (run.status === 'done') {
-      return 'ready';
-    }
-    if (run.uiLane === 'running') {
-      return 'planning';
-    }
-  }
-  return run?.uiLane || 'running';
-}
-
-function laneLabel(lane) {
-  return {
-    planning: 'Planning',
-    ready: 'Ready',
-    running: 'Running',
-    needs_you: 'Needs you',
-    private_validation: 'Validation',
-    unprocessed: 'Unprocessed',
-    failed: 'Failed',
-    done: 'Done',
-  }[lane] || lane;
 }
 
 function modelLabel(config) {
@@ -854,17 +830,8 @@ function IssueList({
         ) : issues.map((issue, index) => {
           const run = issue.currentRun;
           const active = issue.planDoc === selectedIssuePath;
-          const lane = run ? issueLane(run) : (issue.readyWithoutRun ? 'ready' : 'unprocessed');
-          const latest = index === 0;
-          const attention = ['planning', 'running', 'needs_you', 'private_validation', 'failed'].includes(lane);
-          const passive = !latest && issue.processed && !attention;
-          const className = [
-            'run-item',
-            'status-' + lane,
-            active ? 'active' : '',
-            latest ? 'latest' : '',
-            passive ? 'passive' : '',
-          ].filter(Boolean).join(' ');
+          const visual = studioIssueVisualState({ ...issue, active }, index);
+          const { lane, latest, className } = visual;
 
           return (
             <button
@@ -1810,7 +1777,7 @@ function App() {
     }
 
     const storedWidth = Number(
-      window.localStorage.getItem('neal.studio.sidebarWidth:' + workspaceRoot),
+      window.localStorage.getItem(studioSidebarStorageKey(workspaceRoot)),
     );
     if (Number.isFinite(storedWidth) && storedWidth > 0) {
       setSidebarWidth(clampSidebarWidth(storedWidth));
@@ -2031,7 +1998,7 @@ function App() {
       const workspaceRoot = configData?.workspaceRoot;
       if (workspaceRoot) {
         window.localStorage.setItem(
-          'neal.studio.sidebarWidth:' + workspaceRoot,
+          studioSidebarStorageKey(workspaceRoot),
           String(finalWidth),
         );
       }
