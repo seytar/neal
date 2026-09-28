@@ -93,8 +93,65 @@ export function parseWorktreeStatusLine(line: string): WorktreeStatusLine | null
   return {
     raw,
     pathText,
-    paths: pathText.split(' -> ').map((path) => normalize(path)),
+    paths: pathText.split(' -> ').map(decodeGitStatusPath),
   };
+}
+
+function decodeGitStatusPath(path: string) {
+  const trimmed = path.trim();
+  if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) {
+    return normalize(trimmed);
+  }
+
+  const body = trimmed.slice(1, -1);
+  let decoded = '';
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index];
+    if (char !== '\\') {
+      decoded += char;
+      continue;
+    }
+
+    const next = body[index + 1];
+    if (next === undefined) {
+      decoded += '\\';
+      continue;
+    }
+
+    const simpleEscape = {
+      a: '\x07',
+      b: '\b',
+      f: '\f',
+      n: '\n',
+      r: '\r',
+      t: '\t',
+      v: '\v',
+      '\\': '\\',
+      '"': '"',
+    }[next];
+    if (simpleEscape !== undefined) {
+      decoded += simpleEscape;
+      index += 1;
+      continue;
+    }
+
+    if (/[0-7]/.test(next)) {
+      let octal = next;
+      let offset = 2;
+      while (offset <= 3 && /[0-7]/.test(body[index + offset] ?? '')) {
+        octal += body[index + offset];
+        offset += 1;
+      }
+      decoded += String.fromCharCode(Number.parseInt(octal, 8));
+      index += octal.length;
+      continue;
+    }
+
+    decoded += next;
+    index += 1;
+  }
+
+  return normalize(decoded);
 }
 
 export function getLikelyScratchLeakPaths(statusOutput: string): string[] {
