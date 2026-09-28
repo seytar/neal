@@ -1344,7 +1344,13 @@ function RunFacts({ detail }) {
   );
 }
 
-const BASE_TABS = ['progress', 'plan', 'review', 'recovery', 'narrative', 'changes', 'usage'];
+const BASE_TABS = ['progress', 'original', 'plan', 'review', 'recovery', 'narrative', 'changes', 'usage'];
+
+function artifactTabLabel(tab) {
+  if (tab === 'original') return 'Original';
+  if (tab === 'plan') return 'Plan';
+  return tab;
+}
 
 function ViewToggle({ mode, onChange, rawLabel = 'Raw' }) {
   return (
@@ -1526,11 +1532,24 @@ function ArtifactPanel({
 
   let sources = [];
   if (artifact?.kind === 'markdown') {
-    sources = [{
-      label: 'File',
-      path: artifact.path,
-      info: 'Physical Markdown artifact read directly from this file.',
-    }];
+    const source = selectedTab === 'original'
+      ? {
+          label: 'Original plan',
+          path: artifact.path,
+          info: 'Immutable snapshot of the plan file as it was supplied when this Neal run started.',
+        }
+      : selectedTab === 'plan'
+        ? {
+            label: 'Current plan',
+            path: artifact.path,
+            info: 'Current working plan. Planning and refinement may change this file after the run starts.',
+          }
+        : {
+            label: 'File',
+            path: artifact.path,
+            info: 'Physical Markdown artifact read directly from this file.',
+          };
+    sources = [source];
   } else if (artifact?.kind === 'changes') {
     sources = [
       {
@@ -1570,7 +1589,7 @@ function ArtifactPanel({
               key={tab}
               onClick={() => onSelectTab(tab)}
             >
-              {tab}
+              {artifactTabLabel(tab)}
             </button>
           ))}
         </div>
@@ -1726,7 +1745,15 @@ function App() {
         });
       }
     } catch (nextError) {
-      setArtifact({ kind: 'error', content: nextError.message });
+      const unavailableOriginal =
+        tab === 'original' &&
+        nextError.message.includes('Artifact is not available for this run.');
+      setArtifact({
+        kind: 'error',
+        content: unavailableOriginal
+          ? 'Original plan snapshot is unavailable for this legacy run.'
+          : nextError.message,
+      });
     } finally {
       setArtifactLoading(false);
     }
