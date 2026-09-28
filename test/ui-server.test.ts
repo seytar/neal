@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { resolve as resolvePath } from 'node:path';
 
-import { classifyUiRun, getUiIssueTitleFromPlanContent } from '../src/neal/ui-server.js';
+import {
+  classifyUiRun,
+  getUiIssueTitleFromPlanContent,
+  resolveUiIssuesPath,
+} from '../src/neal/ui-server.js';
 
 const base = {
   phase: 'coder_scope' as const,
@@ -101,4 +106,25 @@ test('UI issue titles come from the first Markdown H1', () => {
   );
 
   assert.equal(getUiIssueTitleFromPlanContent('## Objective\n\nNo H1 here.'), null);
+});
+
+
+test('UI issues path is repository-relative and cannot escape the checkout', () => {
+  const cwd = '/tmp/neal-ui-workspace';
+  assert.deepEqual(
+    resolveUiIssuesPath(cwd, 'documentation/issues'),
+    {
+      root: resolvePath(cwd, 'documentation/issues'),
+      displayPath: 'documentation/issues',
+    },
+  );
+
+  assert.throws(
+    () => resolveUiIssuesPath(cwd, '../outside'),
+    /inside the repository root/,
+  );
+  assert.throws(
+    () => resolveUiIssuesPath(cwd, '/tmp/outside'),
+    /relative to the repository root/,
+  );
 });
