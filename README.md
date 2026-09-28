@@ -280,10 +280,18 @@ The Control Center does not maintain a second run database. It reads the same
 run state exposed by `neal status`, `neal changes`, and `neal usage`, then
 presents operator-facing actions as buttons and forms.
 
+The Control Center is issue-oriented while the CLI remains plan-oriented. Configure a
+repository-relative Issues path in the UI and Neal recursively discovers Markdown files
+there. Files with no Neal history appear as Unprocessed, canonical executable plans
+appear as Ready without being replanned, and prior runs remain visible even when their
+plan files are outside the currently configured Issues path. Multiple runs for the same
+plan are grouped as attempts under one issue.
+
 The first version focuses on daily writer-run control:
 
-- current and historical run list
-- running, needs-input, private-validation, failed, and done states
+- issue discovery from a configurable repository-relative Markdown path
+- Unprocessed -> Planning -> Ready -> Running/Needs you/Validation -> Done/Failed presentation
+- current and historical attempts grouped by issue/plan path
 - planner/coder/reviewer configuration
 - operator guidance and predefined resume choices
 - manual-gate instructions and re-check/resume
