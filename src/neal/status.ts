@@ -248,6 +248,7 @@ export type NealStatusListRun = {
   waitingForOperatorGuidance: boolean;
   pendingOperatorGuidance: boolean;
   manualGate: NealManualGateStatusSummary | null;
+  resumeDecision: ResumeDecision;
   commits: NealCommitStatusSummary;
   squash: NealSquashStatusSummary;
   providerError: NealProviderErrorStatusSummary | null;
@@ -524,6 +525,7 @@ export async function buildStatusListSnapshot(args: {
         waitingForOperatorGuidance: snapshot.waitingForOperatorGuidance,
         pendingOperatorGuidance: snapshot.pendingOperatorGuidance,
         manualGate: snapshot.manualGate,
+        resumeDecision: snapshot.resumeDecision,
         commits: snapshot.commits,
         squash: snapshot.squash,
         providerError: snapshot.providerError,
