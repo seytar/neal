@@ -1599,6 +1599,10 @@ function ArtifactPanel({
 
 function App() {
   const [runs, setRuns] = useState([]);
+  const [issues, setIssues] = useState([]);
+  const [issuesPath, setIssuesPath] = useState('.neal/ui-plans');
+  const [selectedIssuePath, setSelectedIssuePath] = useState(null);
+  const [selectedIssueFile, setSelectedIssueFile] = useState(null);
   const [selectedRunId, setSelectedRunId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [selectedTab, setSelectedTab] = useState('progress');
@@ -1627,6 +1631,10 @@ function App() {
     () => runs.some((run) => run.runId === selectedRunId),
     [runs, selectedRunId],
   );
+  const selectedIssue = useMemo(
+    () => issues.find((issue) => issue.planDoc === selectedIssuePath) || null,
+    [issues, selectedIssuePath],
+  );
 
   const refreshConfig = useCallback(async () => {
     setConfigLoading(true);
@@ -1650,8 +1658,10 @@ function App() {
 
   const refreshRuns = useCallback(async () => {
     try {
-      const data = await api('/api/runs');
-      const nextRuns = data.runs || [];
+      const data = await api('/api/issues?path=' + encodeURIComponent(issuesPath));
+      const nextIssues = data.issues || [];
+      const nextRuns = nextIssues.flatMap((issue) => issue.runs || []);
+      setIssues(nextIssues);
       setRuns(nextRuns);
       setError(null);
       return nextRuns;
@@ -1659,7 +1669,7 @@ function App() {
       setError(nextError.message);
       return [];
     }
-  }, []);
+  }, [issuesPath]);
 
   const refreshDetail = useCallback(async () => {
     if (!selectedRunId) {
@@ -1710,6 +1720,17 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const workspaceRoot = configData?.workspaceRoot;
+    if (!workspaceRoot) {
+      return;
+    }
+    const stored = window.localStorage.getItem('neal.control.issuesPath:' + workspaceRoot);
+    if (stored) {
+      setIssuesPath(stored);
+    }
+  }, [configData?.workspaceRoot]);
+
+  useEffect(() => {
     if (newRunAction?.status !== 'running') {
       return undefined;
     }
@@ -1749,17 +1770,30 @@ function App() {
   }, [refreshRuns]);
 
   useEffect(() => {
-    if (!selectedRunId && runs[0]) {
-      setSelectedRunId(runs[0].runId);
+    if (!selectedIssuePath && issues[0]) {
+      setSelectedIssuePath(issues[0].planDoc);
+      setSelectedRunId(issues[0].currentRun?.runId || null);
       return;
     }
-    if (selectedRunId && !selectedExists && runs[0]) {
-      setSelectedRunId(runs[0].runId);
+
+    const issue = issues.find((candidate) => candidate.planDoc === selectedIssuePath);
+    if (!issue && issues[0]) {
+      setSelectedIssuePath(issues[0].planDoc);
+      setSelectedRunId(issues[0].currentRun?.runId || null);
+      return;
     }
-  }, [runs, selectedRunId, selectedExists]);
+
+    if (issue?.currentRun && (!selectedRunId || !selectedExists)) {
+      setSelectedRunId(issue.currentRun.runId);
+    }
+    if (issue && !issue.currentRun && selectedRunId) {
+      setSelectedRunId(null);
+    }
+  }, [issues, selectedIssuePath, selectedRunId, selectedExists]);
 
   useEffect(() => {
     if (!selectedRunId) {
+      setDetail(null);
       return undefined;
     }
     void refreshDetail();
@@ -1806,6 +1840,27 @@ function App() {
       void loadArtifact(selectedTab);
     }
   }, [selectedRunId, selectedTab, loadArtifact]);
+
+  useEffect(() => {
+    if (!selectedIssue || selectedIssue.currentRun) {
+      setSelectedIssueFile(null);
+      return undefined;
+    }
+    let cancelled = false;
+    void api(
+      '/api/issues/file?issuesPath=' + encodeURIComponent(issuesPath) +
+      '&path=' + encodeURIComponent(selectedIssue.displayPath),
+    )
+      .then((data) => {
+        if (!cancelled) setSelectedIssueFile(data);
+      })
+      .catch((nextError) => {
+        if (!cancelled) setError(nextError.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedIssue?.planDoc, selectedIssue?.currentRun?.runId, issuesPath]);
 
   useEffect(() => {
     if (detail?.status?.manualGate) {
@@ -1859,6 +1914,42 @@ function App() {
     }
   }, [selectedRunId, refreshDetail, refreshRuns]);
 
+  const selectIssue = useCallback((issue) => {
+    setSelectedIssuePath(issue.planDoc);
+    setSelectedRunId(issue.currentRun?.runId || null);
+    setSelectedIssueFile(null);
+    setDetail(null);
+  }, []);
+
+  const applyIssuesPath = useCallback((value) => {
+    const next = value.trim() || '.neal/ui-plans';
+    setIssuesPath(next);
+    setSelectedIssuePath(null);
+    setSelectedRunId(null);
+    const workspaceRoot = configData?.workspaceRoot;
+    if (workspaceRoot) {
+      window.localStorage.setItem('neal.control.issuesPath:' + workspaceRoot, next);
+    }
+  }, [configData?.workspaceRoot]);
+
+  const planSelectedIssue = useCallback(async () => {
+    if (!selectedIssue || selectedIssue.currentRun) {
+      return;
+    }
+    try {
+      await api('/api/issues/plan', {
+        method: 'POST',
+        body: JSON.stringify({
+          path: selectedIssue.displayPath,
+          issuesPath,
+        }),
+      });
+      await refreshRuns();
+    } catch (nextError) {
+      setError(nextError.message);
+    }
+  }, [selectedIssue, issuesPath, refreshRuns]);
+
   const openNewRun = useCallback(() => {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const random = window.crypto.randomUUID().slice(0, 8);
@@ -1882,6 +1973,7 @@ function App() {
           description: newRunDescription.trim(),
           planId: newRunPlanId,
           preferredExecutionMode: newRunMode,
+          issuesPath,
         }),
       });
       setNewRunAction(data);
@@ -1889,7 +1981,7 @@ function App() {
     } catch (nextError) {
       setError(nextError.message);
     }
-  }, [newRunDescription, newRunTitle, newRunPlanId, newRunMode, refreshRuns]);
+  }, [newRunDescription, newRunTitle, newRunPlanId, newRunMode, issuesPath, refreshRuns]);
 
   const selectTab = useCallback((tab) => {
     setSelectedTab(tab);
