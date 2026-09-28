@@ -1726,6 +1726,9 @@ function App() {
         setNewRunAction(data);
         if (data.resultRunId) {
           await refreshRuns();
+          if (data.planDoc) {
+            setSelectedIssuePath(data.planDoc);
+          }
           setSelectedRunId(data.resultRunId);
           setNewRunOpen(false);
         }
