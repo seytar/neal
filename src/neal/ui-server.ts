@@ -559,7 +559,12 @@ export function resolveUiIssuesPath(cwd: string, input: string | null | undefine
   }
   const root = resolve(cwd, configured);
   const relativeRoot = relative(cwd, root);
-  if (relativeRoot.startsWith('..') || isAbsolute(relativeRoot)) {
+  if (
+    relativeRoot === '..' ||
+    relativeRoot.startsWith('../') ||
+    relativeRoot.startsWith('..\\') ||
+    isAbsolute(relativeRoot)
+  ) {
     throw new UiHttpError(400, 'Issues path must stay inside the repository root.');
   }
   return {
@@ -702,7 +707,12 @@ function resolveUiIssueFile(cwd: string, issuesPath: string | null | undefined, 
   const configured = resolveUiIssuesPath(cwd, issuesPath);
   const path = resolve(cwd, issuePath);
   const withinRoot = relative(configured.root, path);
-  if (withinRoot.startsWith('..') || isAbsolute(withinRoot)) {
+  if (
+    withinRoot === '..' ||
+    withinRoot.startsWith('../') ||
+    withinRoot.startsWith('..\\') ||
+    isAbsolute(withinRoot)
+  ) {
     throw new UiHttpError(400, 'Issue file must be inside the configured issues path.');
   }
   if (extname(path).toLowerCase() !== '.md') {
