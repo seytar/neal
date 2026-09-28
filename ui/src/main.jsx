@@ -9,6 +9,13 @@ const WRITE_TOKEN = window.__NEAL_UI_TOKEN__ || '';
 const POLL_MS = 2500;
 const ACTIVITY_POLL_MS = 1000;
 const NEW_RUN_POLL_MS = 500;
+const DEFAULT_SIDEBAR_WIDTH = 340;
+const MIN_SIDEBAR_WIDTH = 280;
+const MAX_SIDEBAR_WIDTH = 560;
+
+function clampSidebarWidth(value) {
+  return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, value));
+}
 
 async function api(path, options = {}) {
   const headers = {
@@ -769,7 +776,7 @@ function NewIssueModal({
         </div>
 
         <div className="new-run-note">
-          New issues are stored under <code>{issuesPath}</code>. Neal keeps the canonical Markdown plan mechanics behind the UI,
+          New issues are stored under <code>{issuesPath}</code>. Neal Studio keeps the canonical Markdown plan mechanics behind the UI,
           while the existing CLI and backend workflow stays unchanged.
         </div>
 
@@ -816,12 +823,20 @@ function StatusPill({ lane }) {
   return <span className={'pill ' + lane}>{laneLabel(lane)}</span>;
 }
 
-function IssueList({ issues, selectedIssuePath, onSelect, onCommands, onConfig, onNewRun }) {
+function IssueList({
+  issues,
+  selectedIssuePath,
+  onSelect,
+  onCommands,
+  onConfig,
+  onNewRun,
+  onResizeStart,
+}) {
   return (
     <aside className="sidebar">
       <div className="brand-row">
         <div className="brand">neal</div>
-        <span className="brand-tag">control</span>
+        <span className="brand-tag studio">studio</span>
         <div className="sidebar-mini-actions">
           <button type="button" className="sidebar-command-button" onClick={onConfig}>config</button>
           <button type="button" className="sidebar-command-button" onClick={onCommands}>commands</button>
@@ -829,7 +844,10 @@ function IssueList({ issues, selectedIssuePath, onSelect, onCommands, onConfig, 
       </div>
       <button type="button" className="new-run-button" onClick={onNewRun}>+ New Issue</button>
 
-      <div className="sidebar-section-label">Issues</div>
+      <div className="sidebar-section-head">
+        <span className="sidebar-section-label">Issues</span>
+        <span className="issue-count">{issues.length}</span>
+      </div>
       <div className="run-list">
         {issues.length === 0 ? (
           <div className="muted">No issues yet.</div>
@@ -874,6 +892,13 @@ function IssueList({ issues, selectedIssuePath, onSelect, onCommands, onConfig, 
           );
         })}
       </div>
+      <div
+        className="sidebar-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize Neal Studio sidebar"
+        onPointerDown={onResizeStart}
+      />
     </aside>
   );
 }
@@ -1679,6 +1704,7 @@ function App() {
   const [newRunMode, setNewRunMode] = useState('shadow');
   const [newRunPlanId, setNewRunPlanId] = useState('');
   const [newRunAction, setNewRunAction] = useState(null);
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
 
   const selectedExists = useMemo(
     () => runs.some((run) => run.runId === selectedRunId),
@@ -1781,6 +1807,13 @@ function App() {
     const stored = window.localStorage.getItem('neal.control.issuesPath:' + workspaceRoot);
     if (stored) {
       setIssuesPath(stored);
+    }
+
+    const storedWidth = Number(
+      window.localStorage.getItem('neal.studio.sidebarWidth:' + workspaceRoot),
+    );
+    if (Number.isFinite(storedWidth) && storedWidth > 0) {
+      setSidebarWidth(clampSidebarWidth(storedWidth));
     }
   }, [configData?.workspaceRoot]);
 
@@ -1978,6 +2011,36 @@ function App() {
     setDetail(null);
   }, []);
 
+  const startSidebarResize = useCallback((event) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    document.body.classList.add('studio-resizing');
+
+    const onMove = (moveEvent) => {
+      setSidebarWidth(clampSidebarWidth(startWidth + moveEvent.clientX - startX));
+    };
+
+    const onUp = (upEvent) => {
+      const finalWidth = clampSidebarWidth(startWidth + upEvent.clientX - startX);
+      setSidebarWidth(finalWidth);
+      document.body.classList.remove('studio-resizing');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+
+      const workspaceRoot = configData?.workspaceRoot;
+      if (workspaceRoot) {
+        window.localStorage.setItem(
+          'neal.studio.sidebarWidth:' + workspaceRoot,
+          String(finalWidth),
+        );
+      }
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [sidebarWidth, configData?.workspaceRoot]);
+
   const applyIssuesPath = useCallback((value) => {
     const next = value.trim() || '.neal/ui-plans';
     setIssuesPath(next);
@@ -2064,9 +2127,13 @@ function App() {
     setArtifactViewMode('preview');
   }, []);
 
+  const studioLayoutStyle = {
+    '--sidebar-width': sidebarWidth + 'px',
+  };
+
   if (!selectedIssuePath && issues.length === 0 && !error) {
     return (
-      <div className="layout">
+      <div className="layout studio-layout" style={studioLayoutStyle}>
         <IssueList
           issues={issues}
           selectedIssuePath={selectedIssuePath}
@@ -2074,6 +2141,7 @@ function App() {
           onCommands={() => setCommandsOpen(true)}
           onConfig={openConfig}
           onNewRun={openNewRun}
+          onResizeStart={startSidebarResize}
         />
         <CommandsPanel
           catalog={commandCatalog}
@@ -2111,7 +2179,7 @@ function App() {
   }
 
   return (
-    <div className="layout">
+    <div className="layout studio-layout" style={studioLayoutStyle}>
       <IssueList
         issues={issues}
         selectedIssuePath={selectedIssuePath}
@@ -2119,6 +2187,7 @@ function App() {
         onCommands={() => setCommandsOpen(true)}
         onConfig={openConfig}
         onNewRun={openNewRun}
+        onResizeStart={startSidebarResize}
       />
 
       <CommandsPanel
