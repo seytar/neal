@@ -100,6 +100,20 @@ test('UI lane treats resumable pauses as operator work and terminal states disti
       ...base,
       status: 'failed',
       effectiveStatus: 'failed',
+      resumeDecision: {
+        kind: 'continue',
+        reason: 'The failed attempt can be resumed safely.',
+        resumeCommand: 'neal resume --run run-1',
+      },
+    }),
+    'action_required',
+  );
+
+  assert.equal(
+    classifyUiRun({
+      ...base,
+      status: 'failed',
+      effectiveStatus: 'failed',
     }),
     'failed',
   );
