@@ -10,8 +10,9 @@ test('Studio CSS defines visual states for every issue lane', () => {
     'ready',
     'unprocessed',
     'running',
-    'needs_you',
+    'action_required',
     'private_validation',
+    'blocked',
     'failed',
     'done',
   ]) {
