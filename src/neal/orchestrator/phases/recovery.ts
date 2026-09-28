@@ -17,6 +17,7 @@ import type { RunLogger } from '../../logger.js';
 import { getLaterScopeRevisionEligibility, reviseLaterScope } from '../../plan-scope-revision.js';
 import { hasPendingOperatorGuidance } from '../../run-status.js';
 import { getExecutionPlanPath } from '../../scopes.js';
+import { getShadowVerificationCommandsForState } from '../../shadow-verification.js';
 import { loadState, saveState } from '../../state.js';
 import { getInteractiveRecoveryView, isActivePendingDerivedPlanReview } from '../../state-views.js';
 import { getCoderBlockedRecoveryLaterScopeErrors } from '../../agents/schemas.js';
@@ -836,6 +837,7 @@ export async function runInteractiveBlockedRecoveryPhase(
   });
 
   const laterScopeRevision = await getLaterScopeRevisionOffer(state, terminalOnly);
+  const allowedVerificationCommands = await getShadowVerificationCommandsForState(state);
 
   let codex;
   try {
@@ -852,6 +854,8 @@ export async function runInteractiveBlockedRecoveryPhase(
       terminalOnly,
       allowReplacement: true,
       executionProfile: state.executionProfile,
+      shadowExecutionPolicy: state.shadowExecutionPolicy ?? undefined,
+      allowedVerificationCommands,
       laterScopeRevision,
       sessionHandle: state.coderSessionHandle,
       logger,

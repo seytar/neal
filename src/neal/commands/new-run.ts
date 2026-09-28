@@ -7,7 +7,7 @@ import { assertWriterProvidersConfigured } from '../config.js';
 import { assertGitRepositoryWithCommit } from '../git.js';
 import { loadOrInitialize } from '../orchestrator.js';
 import { assertAgentConfigSupportsShadowRun, assertAgentConfigSupportsWriterRun } from '../providers/registry.js';
-import type { AgentConfig, ExecutionProfile } from '../types.js';
+import type { AgentConfig, ExecutionProfile, ShadowExecutionPolicy } from '../types.js';
 import { executeRun, withPreparedWriterRun } from './runtime.js';
 import { getExecuteRunResultExitCode, setWriterCommandExitCode } from './writer-exit-codes.js';
 
@@ -28,6 +28,7 @@ const PARSE_ONLY_AGENT_CONFIG: AgentConfig = {
 
 export type NewRunCommandOptions = {
   executionProfile?: ExecutionProfile;
+  shadowExecutionPolicy?: ShadowExecutionPolicy;
 };
 
 export async function runNewRunCommand(args: string[], options: NewRunCommandOptions = {}): Promise<void> {
@@ -45,7 +46,10 @@ export async function runNewRunCommand(args: string[], options: NewRunCommandOpt
     if (parsed.topLevelMode !== 'execute') {
       throw new Error('Shadow mode currently supports execute runs only.');
     }
-    assertAgentConfigSupportsShadowRun(parsed.agentConfig, { context: 'new shadow execute writer run' });
+    assertAgentConfigSupportsShadowRun(parsed.agentConfig, {
+      context: 'new shadow execute writer run',
+      shadowExecutionPolicy: options.shadowExecutionPolicy ?? 'verify',
+    });
   } else {
     assertAgentConfigSupportsWriterRun(parsed.agentConfig, { context: `new ${parsed.topLevelMode} writer run` });
   }
@@ -64,12 +68,16 @@ export async function runNewRunCommand(args: string[], options: NewRunCommandOpt
         allowedDirtyPaths: parsed.topLevelMode === 'execute' ? [planDoc] : [],
         runDir: prepared.runDir,
         executionProfile,
+        shadowExecutionPolicy: executionProfile === 'shadow' ? (options.shadowExecutionPolicy ?? 'verify') : null,
         // Preserve generated commits until private validation is explicitly accepted.
         autoSquashOnCompletion: executionProfile === 'shadow' ? false : parsed.squashOnCompletion,
       });
       markInitialized();
       if (loaded.state.executionProfile === 'shadow') {
-        assertAgentConfigSupportsShadowRun(loaded.state.agentConfig, { context: 'new shadow execute writer run' });
+        assertAgentConfigSupportsShadowRun(loaded.state.agentConfig, {
+          context: 'new shadow execute writer run',
+          shadowExecutionPolicy: loaded.state.shadowExecutionPolicy ?? 'strict',
+        });
       } else {
         assertAgentConfigSupportsWriterRun(loaded.state.agentConfig, { context: `new ${loaded.state.topLevelMode} writer run` });
       }

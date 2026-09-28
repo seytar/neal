@@ -805,6 +805,39 @@ test('Claude coder toolPolicy excludes Bash and installs the write-path guard ho
   assert.equal('hooks' in openOptions, false);
 });
 
+test('Claude coder run-command guard allows only exact approved verification commands', async () => {
+  const cwd = '/tmp/neal-shadow-verify';
+  const options = anthropicClaudeProviderTestHooks.buildClaudeCoderQueryOptions(
+    coderRunArgs({
+      cwd,
+      toolPolicy: {
+        allowRun: true,
+        allowedRunCommands: ['pnpm test', 'php -l src/Foo.php'],
+      },
+    }),
+    null,
+    '',
+  );
+  assert.deepEqual(options.tools, ['Read', 'Grep', 'Glob', 'Bash', 'Edit', 'Write']);
+  const guard = options.hooks?.PreToolUse?.[0]?.hooks[0];
+  assert.notEqual(guard, undefined);
+  const invoke = (toolName: string, toolInput: unknown) =>
+    guard!(preToolUseHookInput(toolName, toolInput, cwd), 'tool-use-1', {
+      signal: new AbortController().signal,
+    });
+
+  assert.deepEqual(await invoke('Bash', { command: 'pnpm test' }), { continue: true });
+  assert.deepEqual(await invoke('Bash', { command: '  php -l src/Foo.php  ' }), { continue: true });
+  assert.deepEqual(await invoke('Read', { file_path: '/tmp/neal-shadow-verify/src/Foo.php' }), {
+    continue: true,
+  });
+  assertPreToolUseDeny(await invoke('Bash', { command: 'pnpm lint' }), 'Neal-approved verification commands');
+  assertPreToolUseDeny(
+    await invoke('Bash', { command: 'pnpm test && echo unsafe' }),
+    'Neal-approved verification commands',
+  );
+});
+
 test('Claude coder write-path guard allows only the allowlisted paths and fails closed', async () => {
   const cwd = '/tmp/neal-plan-jail';
   const options = anthropicClaudeProviderTestHooks.buildClaudeCoderQueryOptions(

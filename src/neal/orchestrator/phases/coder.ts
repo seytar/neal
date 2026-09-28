@@ -22,6 +22,7 @@ import { EXECUTE_FINALIZATION_PHASE } from '../../execute-finalization.js';
 import type { RunLogger } from '../../logger.js';
 import { getCurrentScopeLabel, getExecutionPlanPath } from '../../scopes.js';
 import { saveState } from '../../state.js';
+import { getShadowVerificationCommandsForState } from '../../shadow-verification.js';
 import { getDerivedPlanView } from '../../state-views.js';
 import type { ExecuteScopeProgressJustification, OrchestrationState, ScopeMarker } from '../../types.js';
 import { writeExecutionArtifacts, writeManualGateArtifact } from '../artifacts.js';
@@ -211,6 +212,7 @@ export async function runCoderScopePhase(state: OrchestrationState, statePath: s
   const activeCoderSessionProtocol = state.coderSessionHandle
     ? state.coderSessionProtocol
     : 'structured_json_v1';
+  const allowedVerificationCommands = await getShadowVerificationCommandsForState(state);
   try {
     codex = await runCoderScopeRound({
       coder: state.agentConfig.coder,
@@ -220,6 +222,8 @@ export async function runCoderScopePhase(state: OrchestrationState, statePath: s
       sessionHandle: state.coderSessionHandle,
       coderSessionProtocol: state.coderSessionProtocol,
       executionProfile: state.executionProfile,
+      shadowExecutionPolicy: state.shadowExecutionPolicy ?? undefined,
+      allowedVerificationCommands,
       onSessionStarted: async (sessionHandle) => {
         state.coderSessionHandle = sessionHandle;
         state.coderSessionProtocol = activeCoderSessionProtocol;

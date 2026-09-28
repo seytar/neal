@@ -299,6 +299,23 @@ test('authoredExecutionShape defaults to null when the seed plan is absent and r
   assert.equal(reloaded.authoredExecutionShape, null);
 });
 
+test('legacy Shadow states without a policy hydrate to strict', async () => {
+  const { state, statePath } = await createMinimalStateFixture('neal-state-legacy-shadow-policy-');
+  await saveState(statePath, {
+    ...state,
+    executionProfile: 'shadow',
+    shadowExecutionPolicy: 'verify',
+  });
+
+  const persisted = JSON.parse(await readFile(statePath, 'utf8')) as Record<string, unknown>;
+  delete persisted.shadowExecutionPolicy;
+  await writeFile(statePath, JSON.stringify(persisted, null, 2) + '\n', 'utf8');
+
+  const loaded = await loadState(statePath);
+  assert.equal(loaded.executionProfile, 'shadow');
+  assert.equal(loaded.shadowExecutionPolicy, 'strict');
+});
+
 test('autoSquashOnCompletion round-trips when false and defaults to true for legacy states', async () => {
   const { state, statePath } = await createMinimalStateFixture('neal-state-auto-squash-roundtrip-');
   // New runs default to squash-on-completion unless the init opts out.
