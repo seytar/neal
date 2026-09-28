@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, open, readFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -61,6 +61,8 @@ const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PORT = 7331;
 const MAX_REQUEST_BODY_BYTES = 128 * 1024;
 const MAX_ARTIFACT_BYTES = 512 * 1024;
+const DEFAULT_UI_ISSUES_PATH = '.neal/ui-plans';
+const MAX_UI_ISSUE_FILES = 1000;
 
 export type NealUiLane =
   | 'running'
@@ -215,6 +217,14 @@ function requireWriteToken(req: IncomingMessage, token: string) {
   if (typeof supplied !== 'string' || supplied !== token) {
     throw new UiHttpError(403, 'Invalid Neal UI write token.');
   }
+}
+
+function requireQueryString(params: URLSearchParams, key: string) {
+  const value = params.get(key)?.trim();
+  if (!value) {
+    throw new UiHttpError(400, `Missing query parameter: ${key}`);
+  }
+  return value;
 }
 
 function decodeSegment(value: string) {
@@ -541,12 +551,163 @@ export function getUiIssueTitleFromPlanContent(content: string) {
   return heading || null;
 }
 
+export function resolveUiIssuesPath(cwd: string, input: string | null | undefined) {
+  const configured = (input ?? DEFAULT_UI_ISSUES_PATH).trim() || DEFAULT_UI_ISSUES_PATH;
+  if (isAbsolute(configured)) {
+    throw new UiHttpError(400, 'Issues path must be relative to the repository root.');
+  }
+  const root = resolve(cwd, configured);
+  const relativeRoot = relative(cwd, root);
+  if (relativeRoot.startsWith('..') || isAbsolute(relativeRoot)) {
+    throw new UiHttpError(400, 'Issues path must stay inside the repository root.');
+  }
+  return {
+    root,
+    displayPath: relativeRoot || '.',
+  };
+}
+
 async function readUiIssueTitle(planDoc: string) {
   try {
     return getUiIssueTitleFromPlanContent(await readFile(planDoc, 'utf8'));
   } catch {
     return null;
   }
+}
+
+async function listUiIssueFiles(cwd: string, issuesPath: string | null | undefined) {
+  const configured = resolveUiIssuesPath(cwd, issuesPath);
+  const files: string[] = [];
+  const visit = async (directory: string): Promise<void> => {
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch (error) {
+      if (error && typeof error === 'object' && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return;
+      }
+      throw error;
+    }
+    for (const entry of entries) {
+      if (files.length >= MAX_UI_ISSUE_FILES) {
+        return;
+      }
+      if (entry.name === '.git' || entry.name === 'node_modules') {
+        continue;
+      }
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(path);
+        continue;
+      }
+      if (entry.isFile() && extname(entry.name).toLowerCase() === '.md') {
+        files.push(path);
+      }
+    }
+  };
+
+  await visit(configured.root);
+  return {
+    ...configured,
+    files,
+    truncated: files.length >= MAX_UI_ISSUE_FILES,
+  };
+}
+
+async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | null | undefined) {
+  const [snapshot, discovered] = await Promise.all([
+    buildStatusListSnapshot({ cwd: ctx.cwd }),
+    listUiIssueFiles(ctx.cwd, issuesPath),
+  ]);
+
+  const runs = await Promise.all(snapshot.runs.map(async (run) => ({
+    ...run,
+    uiTitle: await readUiIssueTitle(run.planDoc),
+    uiLane: classifyUiRun(run),
+    action: ctx.actions.get(run.runId) ?? null,
+  })));
+
+  const byPlan = new Map<string, {
+    key: string;
+    planDoc: string;
+    displayPath: string;
+    title: string;
+    source: 'workspace' | 'history';
+    runs: typeof runs;
+  }>();
+
+  for (const file of discovered.files) {
+    const key = resolve(file);
+    byPlan.set(key, {
+      key,
+      planDoc: file,
+      displayPath: relative(ctx.cwd, file) || file,
+      title: await readUiIssueTitle(file) ?? file.split(/[\\/]/).at(-1) ?? file,
+      source: 'workspace',
+      runs: [],
+    });
+  }
+
+  for (const run of runs) {
+    const key = resolve(run.planDoc);
+    const issue = byPlan.get(key);
+    if (issue) {
+      issue.runs.push(run);
+      if (!issue.title && run.uiTitle) {
+        issue.title = run.uiTitle;
+      }
+      continue;
+    }
+    byPlan.set(key, {
+      key,
+      planDoc: run.planDoc,
+      displayPath: relative(ctx.cwd, run.planDoc) || run.planDoc,
+      title: run.uiTitle || run.planDoc.split(/[\\/]/).at(-1) || run.planDoc,
+      source: 'history',
+      runs: [run],
+    });
+  }
+
+  const issues = [...byPlan.values()].map((issue) => {
+    const currentRun = issue.runs[0] ?? null;
+    const action = [...ctx.actions.values()].find((candidate) =>
+      candidate.planDoc && resolve(candidate.planDoc) === resolve(issue.planDoc)
+    ) ?? null;
+    return {
+      ...issue,
+      currentRun,
+      processed: currentRun !== null,
+      action,
+    };
+  });
+
+  issues.sort((left, right) => {
+    if (left.processed !== right.processed) {
+      return left.processed ? 1 : -1;
+    }
+    const leftUpdated = left.currentRun?.updatedAt ?? '';
+    const rightUpdated = right.currentRun?.updatedAt ?? '';
+    return rightUpdated.localeCompare(leftUpdated) || left.title.localeCompare(right.title);
+  });
+
+  return {
+    issuesPath: discovered.displayPath,
+    truncated: discovered.truncated,
+    issues,
+  };
+}
+
+function resolveUiIssueFile(cwd: string, issuesPath: string | null | undefined, issuePath: string) {
+  const configured = resolveUiIssuesPath(cwd, issuesPath);
+  const path = resolve(cwd, issuePath);
+  const withinRoot = relative(configured.root, path);
+  if (withinRoot.startsWith('..') || isAbsolute(withinRoot)) {
+    throw new UiHttpError(400, 'Issue file must be inside the configured issues path.');
+  }
+  if (extname(path).toLowerCase() !== '.md') {
+    throw new UiHttpError(400, 'Issue file must be Markdown.');
+  }
+  return path;
 }
 
 async function buildRunDetail(ctx: UiServerContext, runId: string) {
@@ -743,8 +904,8 @@ function requireUiPlanId(body: Record<string, unknown>) {
   return value;
 }
 
-function buildUiPlanPath(cwd: string, planId: string) {
-  return join(cwd, '.neal', 'ui-plans', `${planId}.md`);
+function buildUiPlanPath(cwd: string, planId: string, issuesPath?: string | null) {
+  return join(resolveUiIssuesPath(cwd, issuesPath).root, `${planId}.md`);
 }
 
 function renderUiSeedPlan(title: string, description: string) {
@@ -935,6 +1096,49 @@ async function handleApi(
     return;
   }
 
+  if (req.method === 'GET' && pathname === '/api/issues') {
+    const issuesPath = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams.get('path');
+    json(res, 200, await buildUiIssuesSnapshot(ctx, issuesPath));
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/issues/file') {
+    const params = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
+    const path = resolveUiIssueFile(
+      ctx.cwd,
+      params.get('issuesPath'),
+      requireQueryString(params, 'path'),
+    );
+    json(res, 200, {
+      path: relative(ctx.cwd, path) || path,
+      title: await readUiIssueTitle(path),
+      content: await readArtifact(path),
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/issues/plan') {
+    requireWriteToken(req, ctx.token);
+    const body = await readJsonBody(req);
+    const issuePath = requireString(body, 'path');
+    const issuesPath = optionalString(body, 'issuesPath');
+    const planDoc = resolveUiIssueFile(ctx.cwd, issuesPath, issuePath);
+    await stat(planDoc);
+    const displayPath = relative(ctx.cwd, planDoc) || planDoc;
+    const actionKey = `__issue__:${displayPath}`;
+    const action = startAction(ctx, actionKey, 'Plan issue', `neal plan ${shellQuoteForDisplay(displayPath)}`, async () => {
+      await runNewRunCommand(['plan', displayPath]);
+      return {
+        resultRunId: await findNewestRunForPlan(ctx.cwd, planDoc, 'plan'),
+        planDoc,
+      };
+    });
+    action.planDoc = planDoc;
+    ctx.actions.set(actionKey, action);
+    json(res, 202, { ...action, displayPath });
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/api/new-run/status') {
     const action = ctx.actions.get('__new_run__') ?? null;
     if (!action) {
@@ -959,7 +1163,8 @@ async function handleApi(
     const description = requireString(body, 'description');
     const title = optionalString(body, 'title') ?? description.split(/\r?\n/)[0]?.trim().slice(0, 80) ?? 'New task';
     const planId = requireUiPlanId(body);
-    const planDoc = buildUiPlanPath(ctx.cwd, planId);
+    const issuesPath = optionalString(body, 'issuesPath');
+    const planDoc = buildUiPlanPath(ctx.cwd, planId, issuesPath);
     await mkdir(dirname(planDoc), { recursive: true });
     await writeFile(planDoc, renderUiSeedPlan(title, description), { encoding: 'utf8', flag: 'wx' });
 
