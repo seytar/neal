@@ -60,4 +60,5 @@ test('Studio issue card exposes passive done state for visual regression checks'
   assert.match(html, /data-passive="true"/);
   assert.match(html, /status-done/);
   assert.match(html, /1 attempt/);
+  assert.match(html, /step: done/);
 });
