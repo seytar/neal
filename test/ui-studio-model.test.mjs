@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import {
   clampSidebarWidth,
   issueLane,
+  laneLabel,
+  studioBlockerSummary,
   studioIssueVisualState,
   studioSidebarStorageKey,
 } from '../ui/src/studio-model.js';
@@ -94,4 +96,51 @@ test('Studio visual state marks the selected issue active without changing its l
   assert.equal(visual.passive, false);
   assert.match(visual.className, /active/);
   assert.match(visual.className, /status-running/);
+});
+
+
+test('Studio labels operator work, blocked runs, and failed runs distinctly', () => {
+  assert.equal(laneLabel('action_required'), 'Action required');
+  assert.equal(laneLabel('blocked'), 'Blocked');
+  assert.equal(laneLabel('failed'), 'Failed');
+
+  for (const lane of ['action_required', 'blocked', 'failed']) {
+    const visual = studioIssueVisualState({
+      processed: true,
+      readyWithoutRun: false,
+      currentRun: { topLevelMode: 'execute', status: lane === 'failed' ? 'failed' : 'blocked', uiLane: lane },
+    }, 4);
+    assert.equal(visual.lane, lane);
+    assert.equal(visual.attention, true);
+    assert.equal(visual.passive, false);
+  }
+});
+
+test('Studio blocker summary surfaces the recorded reason and resume action', () => {
+  const summary = studioBlockerSummary({
+    status: 'blocked',
+    effectiveStatus: 'blocked',
+    blocker: {
+      active: true,
+      reason: 'Planner stopped because a required dependency is missing.',
+      source: 'RUN_STATE.json blocker reason',
+      artifactPaths: [{ label: 'Recovery', path: '/tmp/RECOVERY.md' }],
+    },
+    blockedGuidance: null,
+    providerError: null,
+    resumeDecision: {
+      kind: 'continue',
+      reason: 'The blocked phase can be restored.',
+      resumeCommand: 'neal resume --run run-1',
+    },
+  });
+
+  assert.deepEqual(summary, {
+    reason: 'Planner stopped because a required dependency is missing.',
+    source: 'RUN_STATE.json blocker reason',
+    artifactPaths: [{ label: 'Recovery', path: '/tmp/RECOVERY.md' }],
+    resumeAvailable: true,
+    resumeReason: 'The blocked phase can be restored.',
+    resumeCommand: 'neal resume --run run-1',
+  });
 });
