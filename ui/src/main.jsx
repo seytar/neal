@@ -667,7 +667,6 @@ function NewIssueModal({
   setDescription,
   mode,
   setMode,
-  planId,
   action,
   onStart,
 }) {
@@ -1828,7 +1827,6 @@ function App() {
         setDescription={setNewRunDescription}
         mode={newRunMode}
         setMode={setNewRunMode}
-        planId={newRunPlanId}
         action={newRunAction}
         onStart={startNewRun}
       />
@@ -1872,7 +1870,6 @@ function App() {
         setDescription={setNewRunDescription}
         mode={newRunMode}
         setMode={setNewRunMode}
-        planId={newRunPlanId}
         action={newRunAction}
         onStart={startNewRun}
       />
