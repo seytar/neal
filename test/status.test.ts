@@ -1391,6 +1391,34 @@ test('buildStatusListSnapshot exposes sorted public run list rows', async () => 
   assert.match(output, /Needs operator guidance: Neal stopped because scope 1 needs operator guidance before it can continue\. Use first resume option: neal resume --run 2026-04-25T19-00-00\.000Z-waiting --message "Continue using this operator guidance\./);
 });
 
+test('buildStatusListSnapshot includes resume decisions only when explicitly requested', async () => {
+  const now = new Date('2026-04-25T18:15:52.082Z');
+  const fixture = await createStatusFixture({
+    now,
+    phase: 'blocked',
+    status: 'blocked',
+    mutate: (state) => ({
+      ...state,
+      phase: 'blocked',
+      status: 'blocked',
+      blockedFromPhase: 'coder_scope',
+      coderSessionHandle: 'coder-resume-session',
+      coderSessionProtocol: 'structured_json_v1',
+      blockerReason: 'Coder scope paused for a resumable blocker.',
+    }),
+  });
+
+  const ordinary = await buildStatusListSnapshot({ cwd: fixture.cwd, now });
+  const studio = await buildStatusListSnapshot({
+    cwd: fixture.cwd,
+    now,
+    includeResumeDecision: true,
+  });
+
+  assert.equal('resumeDecision' in ordinary.runs[0], false);
+  assert.equal(studio.runs[0].resumeDecision?.kind, 'continue');
+});
+
 test('buildStatusListSnapshot recommends plain resume for ordinary failed coder scope runs', async () => {
   const now = new Date('2026-04-25T18:15:52.082Z');
   const cwd = await mkdtemp(join(tmpdir(), 'neal-status-list-failed-project-'));
