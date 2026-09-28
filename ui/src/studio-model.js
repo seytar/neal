@@ -27,9 +27,10 @@ export function laneLabel(lane) {
     planning: 'Planning',
     ready: 'Ready',
     running: 'Running',
-    needs_you: 'Needs you',
+    action_required: 'Action required',
     private_validation: 'Validation',
     unprocessed: 'Unprocessed',
+    blocked: 'Blocked',
     failed: 'Failed',
     done: 'Done',
   }[lane] || lane;
@@ -39,7 +40,7 @@ export function studioIssueVisualState(issue, index) {
   const run = issue.currentRun;
   const lane = run ? issueLane(run) : (issue.readyWithoutRun ? 'ready' : 'unprocessed');
   const latest = index === 0;
-  const attention = ['planning', 'running', 'needs_you', 'private_validation', 'failed'].includes(lane);
+  const attention = ['planning', 'running', 'action_required', 'private_validation', 'blocked', 'failed'].includes(lane);
   const passive = !latest && !attention && (Boolean(issue.processed) || Boolean(issue.readyWithoutRun));
 
   return {
