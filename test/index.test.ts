@@ -870,15 +870,16 @@ test('plan-mode initialization creates a run-local backup copy and persists its 
   assert.equal(persistedState.planDocBackupPath, loaded.state.planDocBackupPath);
 });
 
-test('execute-mode initialization does not create a plan backup path', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'neal-index-execute-no-backup-'));
+test('execute-mode initialization preserves the original plan snapshot', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'neal-index-execute-original-backup-'));
   const cwd = join(root, 'repo');
   await runGit(root, 'init', 'repo');
   await runGit(cwd, 'config', 'user.name', 'Neal Test');
   await runGit(cwd, 'config', 'user.email', 'neal@example.com');
   await runGit(cwd, 'config', 'commit.gpgsign', 'false');
   const planDoc = join(cwd, 'PLAN.md');
-  await writeFile(planDoc, '## Execution Shape\n\nexecutionShape: one_shot\n', 'utf8');
+  const originalPlan = '## Execution Shape\n\nexecutionShape: one_shot\n';
+  await writeFile(planDoc, originalPlan, 'utf8');
   await runGit(cwd, 'add', 'PLAN.md');
   await runGit(cwd, 'commit', '-m', 'base commit');
 
@@ -890,7 +891,8 @@ test('execute-mode initialization does not create a plan backup path', async () 
     'execute',
   );
 
-  assert.equal(loaded.state.planDocBackupPath, null);
+  assert.equal(loaded.state.planDocBackupPath, join(loaded.state.runDir, 'PLAN_ORIGINAL.md'));
+  assert.equal(await readFile(loaded.state.planDocBackupPath!, 'utf8'), originalPlan);
 });
 
 test('direct execute admission starts with a clean selected plan document', async () => {
