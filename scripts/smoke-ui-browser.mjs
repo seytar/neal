@@ -52,6 +52,28 @@ function smokeScript(mode) {
         document.body.dataset.smokeIssueListScrollbarColor = runListStyle.scrollbarColor || '';
       }
       document.body.dataset.smokeBodyOverflow = getComputedStyle(document.body).overflow;
+
+      const pills = Array.from(document.querySelectorAll('.pill'))
+        .map((pill) => pill.textContent.trim())
+        .filter(Boolean);
+      document.body.dataset.smokeStatusPills = pills.join('|');
+
+      const blockerNotice = document.querySelector('.notice');
+      if (blockerNotice) {
+        document.body.dataset.smokeBlockerReason = blockerNotice.textContent.trim();
+      }
+
+      const originalTab = Array.from(document.querySelectorAll('.tab'))
+        .find((tab) => tab.textContent.trim() === 'Original');
+      document.body.dataset.smokeOriginalTab = originalTab ? 'true' : 'false';
+      if (originalTab) {
+        originalTab.click();
+        setTimeout(() => {
+          const originalSource = Array.from(document.querySelectorAll('.source-label'))
+            .find((label) => label.textContent.includes('Original plan'));
+          document.body.dataset.smokeOriginalSource = originalSource ? 'true' : 'false';
+        }, 250);
+      }
   `;
 
   if (mode === 'drag') {
@@ -153,19 +175,85 @@ const config = {
   },
 };
 
+const runId = 'smoke-run-28';
+const planDoc = workspaceRoot + '/documentation/issues/28.md';
+const run = {
+  runId,
+  planDoc,
+  topLevelMode: 'execute',
+  status: 'blocked',
+  effectiveStatus: 'blocked',
+  publicStatus: 'blocked',
+  phase: 'blocked',
+  publicPhase: 'blocked',
+  currentScopeNumber: 1,
+  waitingForOperatorGuidance: false,
+  pendingOperatorGuidance: false,
+  manualGate: null,
+  nextAction: 'Resume this run: neal resume --run ' + runId,
+  uiLane: 'action_required',
+};
+
 const issue = {
-  key: workspaceRoot + '/documentation/issues/28.md',
-  planDoc: workspaceRoot + '/documentation/issues/28.md',
+  key: planDoc,
+  planDoc,
   displayPath: 'documentation/issues/28.md',
   title: longTitle,
   source: 'workspace',
-  executable: false,
+  executable: true,
   workspaceUpdatedAtMs: Date.now(),
-  runs: [],
-  currentRun: null,
-  processed: false,
+  runs: [run],
+  currentRun: run,
+  processed: true,
   readyWithoutRun: false,
   action: null,
+};
+
+const runArtifacts = {
+  originalPlanPath: workspaceRoot + '/.neal/runs/' + runId + '/PLAN_ORIGINAL.md',
+  runStatePath: workspaceRoot + '/.neal/runs/' + runId + '/RUN_STATE.json',
+  eventsPath: workspaceRoot + '/.neal/runs/' + runId + '/events.ndjson',
+  runNarrativeMarkdownPath: workspaceRoot + '/.neal/runs/' + runId + '/RUN_NARRATIVE.md',
+  reviewMarkdownPath: workspaceRoot + '/.neal/runs/' + runId + '/REVIEW.md',
+  progressMarkdownPath: workspaceRoot + '/.neal/runs/' + runId + '/PLAN_PROGRESS.md',
+  recoveryMarkdownPath: workspaceRoot + '/.neal/runs/' + runId + '/RECOVERY.md',
+};
+
+const runDetail = {
+  uiTitle: longTitle,
+  uiLane: 'action_required',
+  action: null,
+  guidanceOptions: [],
+  executionCommands: {
+    shadow: 'neal shadow execute documentation/issues/28.md',
+    normal: 'neal execute documentation/issues/28.md',
+  },
+  status: {
+    ...run,
+    nextAction: 'Resume this run: neal resume --run ' + runId,
+    blockedGuidance: null,
+    blocker: {
+      active: true,
+      reason: 'Smoke blocker reason.',
+      source: 'RUN_STATE.json blocker reason',
+      artifactPaths: [],
+    },
+    resumeDecision: {
+      kind: 'continue',
+      reason: 'The blocked phase can be restored.',
+      resumeCommand: 'neal resume --run ' + runId,
+    },
+    findings: {
+      total: 0,
+      openBlocking: 0,
+      openNonBlocking: 0,
+      fixed: 0,
+      rejected: 0,
+      deferred: 0,
+    },
+    build: { agentConfig: {} },
+    artifacts: runArtifacts,
+  },
 };
 
 const server = createServer((req, res) => {
@@ -189,6 +277,41 @@ const server = createServer((req, res) => {
         path: issue.displayPath,
         title: longTitle,
         content: '# ' + longTitle + '\n\nSmoke issue body.\n',
+      });
+      return;
+    }
+    if (url.pathname === '/api/runs/' + runId) {
+      json(res, runDetail);
+      return;
+    }
+    if (url.pathname === '/api/runs/' + runId + '/activity') {
+      json(res, {
+        runId,
+        phase: 'blocked',
+        status: 'blocked',
+        terminalFooterLine: '[neal] smoke | activity: blocked | status: blocked',
+        nextAction: runDetail.status.nextAction,
+        lastMeaningfulEvent: { type: 'run.blocked', summary: 'run blocked' },
+        phaseElapsedMs: 1000,
+        sampledAt: Date.now(),
+        health: { classification: 'blocked' },
+        action: null,
+        path: runArtifacts.eventsPath,
+        events: [],
+      });
+      return;
+    }
+    if (url.pathname === '/api/runs/' + runId + '/artifacts/progress') {
+      json(res, {
+        path: runArtifacts.progressMarkdownPath,
+        content: '# Plan Progress\n\nSmoke progress.\n',
+      });
+      return;
+    }
+    if (url.pathname === '/api/runs/' + runId + '/artifacts/original') {
+      json(res, {
+        path: runArtifacts.originalPlanPath,
+        content: '# Original Plan\n\nImmutable smoke input.\n',
       });
       return;
     }
@@ -269,6 +392,10 @@ try {
   assert.match(first, /data-smoke-issue-list-overflow-y="auto"/);
   assert.match(first, /data-smoke-issue-list-scrollbar-color="[^"]+"/);
   assert.match(first, /data-smoke-body-overflow="hidden"/);
+  assert.match(first, /data-smoke-status-pills="[^"]*Action required[^"]*"/);
+  assert.match(first, /data-smoke-blocker-reason="ReasonSmoke blocker reason\."/);
+  assert.match(first, /data-smoke-original-tab="true"/);
+  assert.match(first, /data-smoke-original-source="true"/);
   assert.match(first, /data-smoke-stored-width="440"/);
 
   const second = await dumpDom(baseUrl + '/?smoke=reload');
