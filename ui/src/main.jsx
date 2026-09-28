@@ -39,6 +39,26 @@ function basename(path) {
   return parts.at(-1) || String(path || 'Unknown plan');
 }
 
+function groupRunsIntoIssues(runs) {
+  const issues = new Map();
+  for (const run of runs) {
+    const key = String(run.planDoc || run.runId);
+    const existing = issues.get(key);
+    if (existing) {
+      existing.runs.push(run);
+      continue;
+    }
+    issues.set(key, {
+      key,
+      title: run.uiTitle || basename(run.planDoc),
+      planDoc: run.planDoc,
+      currentRun: run,
+      runs: [run],
+    });
+  }
+  return [...issues.values()];
+}
+
 function laneLabel(lane) {
   return {
     running: 'Running',
@@ -638,7 +658,7 @@ function LiveActivity({ activity, loading }) {
   );
 }
 
-function NewRunModal({
+function NewIssueModal({
   open,
   onClose,
   title,
@@ -669,16 +689,14 @@ function NewRunModal({
   const actionElapsed = busy && action?.startedAt
     ? Math.max(0, now - Date.parse(action.startedAt))
     : 0;
-  const previewPath = '.neal/ui-plans/' + planId + '.md';
-  const previewCommand = "neal plan '" + previewPath + "'";
 
   return (
     <div className="commands-backdrop" onClick={busy ? undefined : onClose}>
       <section className="new-run-modal" onClick={(event) => event.stopPropagation()}>
         <div className="commands-head">
           <div>
-            <strong>New Run</strong>
-            <span>plan first, then execute</span>
+            <strong>New Issue</strong>
+            <span>describe the work, Neal handles the plan</span>
           </div>
           <button type="button" className="panel-close" onClick={onClose} disabled={busy}>×</button>
         </div>
@@ -693,7 +711,7 @@ function NewRunModal({
           disabled={busy}
         />
 
-        <label className="field-label" htmlFor="new-run-description">Task</label>
+        <label className="field-label" htmlFor="new-run-description">Description</label>
         <textarea
           id="new-run-description"
           className="new-run-task"
@@ -704,7 +722,7 @@ function NewRunModal({
         />
 
         <div className="new-run-mode">
-          <span>Execution after planning</span>
+          <span>Default execution mode</span>
           <div className="mode-buttons">
             <button
               type="button"
@@ -726,25 +744,26 @@ function NewRunModal({
         </div>
 
         <div className="new-run-note">
-          Neal will create the seed Markdown under <code>.neal/ui-plans/</code>, then refine it in place.
-          Your task text is kept as entered, and user-facing planning and operator questions are asked to preserve that language.
+          Neal keeps the canonical Markdown plan as an internal implementation detail.
+          The issue remains the UI-level object while the existing CLI and backend workflow stays unchanged.
         </div>
 
         {action?.command ? (
-          <CommandLine
-            command={action.command}
-            label={action.status === 'running' ? 'Running' : 'Last command'}
-          />
-        ) : (
-          <CommandLine command={previewCommand} label="Will run" />
-        )}
+          <details className="advanced-details">
+            <summary>Technical details</summary>
+            <CommandLine
+              command={action.command}
+              label={action.status === 'running' ? 'Running' : 'Last command'}
+            />
+          </details>
+        ) : null}
 
         {busy ? (
           <div className="new-run-progress">
             <span className="pulse" />
             <div>
-              <strong>Planning... · elapsed {formatElapsed(actionElapsed)}</strong>
-              <span>Creating the run now. As soon as RUN_STATE.json exists, this modal closes and live monitoring takes over.</span>
+              <strong>Planning issue... · elapsed {formatElapsed(actionElapsed)}</strong>
+              <span>Neal is refining the issue into its canonical executable plan. Live monitoring takes over as soon as the run exists.</span>
             </div>
           </div>
         ) : null}
@@ -759,7 +778,7 @@ function NewRunModal({
             disabled={!description.trim() || busy}
             onClick={onStart}
           >
-            {busy ? 'Planning…' : 'Start planning'}
+            {busy ? 'Planning…' : 'Create & plan'}
           </ActionButton>
           {!busy ? <ActionButton onClick={onClose}>Cancel</ActionButton> : null}
         </div>
@@ -772,7 +791,9 @@ function StatusPill({ lane }) {
   return <span className={'pill ' + lane}>{laneLabel(lane)}</span>;
 }
 
-function RunList({ runs, selectedRunId, onSelect, onCommands, onConfig, onNewRun }) {
+function IssueList({ runs, selectedRunId, onSelect, onCommands, onConfig, onNewRun }) {
+  const issues = useMemo(() => groupRunsIntoIssues(runs), [runs]);
+
   return (
     <aside className="sidebar">
       <div className="brand-row">
@@ -783,28 +804,33 @@ function RunList({ runs, selectedRunId, onSelect, onCommands, onConfig, onNewRun
           <button type="button" className="sidebar-command-button" onClick={onCommands}>commands</button>
         </div>
       </div>
-      <button type="button" className="new-run-button" onClick={onNewRun}>+ New Run</button>
+      <button type="button" className="new-run-button" onClick={onNewRun}>+ New Issue</button>
 
+      <div className="sidebar-section-label">Issues</div>
       <div className="run-list">
-        {runs.length === 0 ? (
-          <div className="muted">No Neal runs found.</div>
-        ) : runs.map((run) => (
-          <button
-            type="button"
-            className={'run-item ' + (run.runId === selectedRunId ? 'active' : '')}
-            key={run.runId}
-            onClick={() => onSelect(run.runId)}
-          >
-            <div className="run-head">
-              <div className="run-title">{basename(run.planDoc)}</div>
-              <StatusPill lane={run.uiLane} />
-            </div>
-            <div className="run-meta-line">
-              <span>S{run.currentScopeNumber}</span>
-              <span>{run.publicPhase}</span>
-            </div>
-          </button>
-        ))}
+        {issues.length === 0 ? (
+          <div className="muted">No issues yet.</div>
+        ) : issues.map((issue) => {
+          const run = issue.currentRun;
+          const active = issue.runs.some((candidate) => candidate.runId === selectedRunId);
+          return (
+            <button
+              type="button"
+              className={'run-item ' + (active ? 'active' : '')}
+              key={issue.key}
+              onClick={() => onSelect(run.runId)}
+            >
+              <div className="run-head">
+                <div className="run-title">{issue.title}</div>
+                <StatusPill lane={run.uiLane} />
+              </div>
+              <div className="run-meta-line">
+                <span>{issue.runs.length} {issue.runs.length === 1 ? 'attempt' : 'attempts'}</span>
+                <span>{run.publicPhase}</span>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </aside>
   );
@@ -1771,7 +1797,7 @@ function App() {
   if (!selectedRunId && runs.length === 0 && !error) {
     return (
       <div className="layout">
-        <RunList
+        <IssueList
           runs={runs}
           selectedRunId={selectedRunId}
           onSelect={setSelectedRunId}
@@ -1793,7 +1819,7 @@ function App() {
           onReload={refreshConfig}
         />
 
-      <NewRunModal
+      <NewIssueModal
         open={newRunOpen}
         onClose={() => setNewRunOpen(false)}
         title={newRunTitle}
@@ -1807,14 +1833,14 @@ function App() {
         onStart={startNewRun}
       />
 
-      <main className="main"><div className="empty">No Neal runs found in this project.</div></main>
+      <main className="main"><div className="empty">No issues yet. Create one from the sidebar.</div></main>
       </div>
     );
   }
 
   return (
     <div className="layout">
-      <RunList
+      <IssueList
         runs={runs}
         selectedRunId={selectedRunId}
         onSelect={setSelectedRunId}
@@ -1837,7 +1863,7 @@ function App() {
         onReload={refreshConfig}
       />
 
-      <NewRunModal
+      <NewIssueModal
         open={newRunOpen}
         onClose={() => setNewRunOpen(false)}
         title={newRunTitle}
@@ -1860,8 +1886,13 @@ function App() {
           <>
             <header className="topbar">
               <div className="title-line">
-                <h1>{basename(detail.status.planDoc)}</h1>
-                <span className="run-id">{detail.status.runId}</span>
+                <h1>{detail.uiTitle || basename(detail.status.planDoc)}</h1>
+                <span className="run-id">
+                  {runs.filter((run) => run.planDoc === detail.status.planDoc).length > 1
+                    ? runs.filter((run) => run.planDoc === detail.status.planDoc).length + ' attempts · '
+                    : ''}
+                  {detail.status.runId}
+                </span>
               </div>
               <div className="top-actions">
                 <button type="button" className="button compact" onClick={openConfig}>
