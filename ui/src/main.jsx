@@ -7,6 +7,8 @@ import {
   DEFAULT_SIDEBAR_WIDTH,
   clampSidebarWidth,
   issueLane,
+  laneLabel,
+  studioBlockerSummary,
   studioSidebarStorageKey,
 } from './studio-model.js';
 import { StatusPill, StudioIssueCard } from './studio-issue-card.jsx';
@@ -1001,6 +1003,7 @@ function ActionPanel({
   const status = detail.status;
   const runningAction = detail.action?.status === 'running';
   const runId = status.runId;
+  const blocker = studioBlockerSummary(status);
 
   if (runningAction) {
     return (
@@ -1223,6 +1226,59 @@ function ActionPanel({
     );
   }
 
+  if (blocker) {
+    const lane = issueLane({ ...status, uiLane: detail.uiLane });
+    const actionRequired = lane === 'action_required';
+    return (
+      <section className={'card ' + (actionRequired ? 'attention' : '')}>
+        <div className="eyebrow">{actionRequired ? 'Action required' : 'Run blocked'}</div>
+        <h2>{actionRequired ? 'Neal stopped and needs an action' : 'Neal cannot continue'}</h2>
+
+        <div className="notice">
+          <strong>Reason</strong>
+          <div>{blocker.reason}</div>
+        </div>
+
+        {blocker.source ? (
+          <p className="body-copy">
+            Source: <code>{blocker.source}</code>
+          </p>
+        ) : null}
+
+        <div className="actions">
+          <ActionButton kind="primary" onClick={() => onArtifactTab('recovery')}>Open recovery</ActionButton>
+          <ActionButton onClick={() => onArtifactTab('review')}>Open review</ActionButton>
+          <ActionButton onClick={() => onArtifactTab('progress')}>Progress</ActionButton>
+        </div>
+
+        {blocker.artifactPaths.length ? (
+          <SourceStrip
+            sources={blocker.artifactPaths.map((artifactPath) => ({
+              label: artifactPath.label,
+              path: artifactPath.path,
+              info: 'Blocker-related artifact recorded for this run.',
+            }))}
+          />
+        ) : null}
+
+        {blocker.resumeAvailable ? (
+          <>
+            {blocker.resumeReason ? <p className="body-copy">{blocker.resumeReason}</p> : null}
+            <CommandLine
+              command={blocker.resumeCommand || ('neal resume --run ' + runId)}
+              label="Will run"
+            />
+            <ActionButton kind="primary" onClick={() => onAction('resume')}>
+              Resume
+            </ActionButton>
+          </>
+        ) : (
+          <p className="body-copy">{status.nextAction}</p>
+        )}
+      </section>
+    );
+  }
+
   if (status.resumeDecision?.kind === 'continue') {
     return (
       <section className="card">
@@ -1290,13 +1346,14 @@ function RunFacts({ detail }) {
   const config = status.build?.agentConfig || {};
   const statePath = status.artifacts.runStatePath;
   const eventsPath = status.artifacts.eventsPath;
+  const studioLane = issueLane({ ...status, uiLane: detail.uiLane });
 
   return (
     <section className="card run-facts">
       <div className="fact-strip">
         <div>
-          <span>Status <InfoTip text={'Persisted/public lifecycle derived primarily from ' + statePath} /></span>
-          <strong>{status.publicStatus}</strong>
+          <span>Status <InfoTip text={'Studio action state derived from the persisted run lifecycle, resume decision and operator requirements. Raw Neal status: ' + status.publicStatus + '. Source: ' + statePath} /></span>
+          <strong title={'Raw Neal status: ' + status.publicStatus}>{laneLabel(studioLane)}</strong>
         </div>
         <div>
           <span>Step <InfoTip text={'Current orchestration phase from ' + statePath} /></span>
