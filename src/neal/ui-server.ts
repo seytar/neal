@@ -147,6 +147,23 @@ export function classifyUiRun(run: UiClassifiableRun): NealUiLane {
   return 'running';
 }
 
+async function classifyUiListRun(cwd: string, run: NealStatusListRun): Promise<NealUiLane> {
+  if (
+    run.status === 'blocked' ||
+    run.status === 'failed' ||
+    run.effectiveStatus === 'blocked' ||
+    run.effectiveStatus === 'failed'
+  ) {
+    const status = await buildStatusSnapshot({
+      cwd,
+      statePath: run.statePath,
+    });
+    return classifyUiRun(status);
+  }
+
+  return classifyUiRun(run);
+}
+
 function json(res: ServerResponse, statusCode: number, body: unknown) {
   const payload = JSON.stringify(body);
   res.writeHead(statusCode, {
@@ -741,7 +758,7 @@ async function buildUiIssuesSnapshot(ctx: UiServerContext, issuesPath: string | 
   const runs = await Promise.all(snapshot.runs.map(async (run) => ({
     ...run,
     uiTitle: await readUiIssueTitle(run.planDoc),
-    uiLane: classifyUiRun(run),
+    uiLane: await classifyUiListRun(ctx.cwd, run),
     action: ctx.actions.get(run.runId) ?? null,
   })));
 
@@ -1304,7 +1321,7 @@ async function handleApi(
     const runs = await Promise.all(snapshot.runs.map(async (run) => ({
       ...run,
       uiTitle: await getTitle(run.planDoc),
-      uiLane: classifyUiRun(run),
+      uiLane: await classifyUiListRun(ctx.cwd, run),
       action: ctx.actions.get(run.runId) ?? null,
     })));
     json(res, 200, {
