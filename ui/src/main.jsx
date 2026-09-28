@@ -78,6 +78,7 @@ function laneLabel(lane) {
     running: 'Running',
     needs_you: 'Needs you',
     private_validation: 'Validation',
+    unprocessed: 'Unprocessed',
     failed: 'Failed',
     done: 'Done',
   }[lane] || lane;
@@ -359,9 +360,10 @@ function RoleConfigCard({ role, config, draft, setDraft }) {
   );
 }
 
-function ConfigPanel({ open, onClose, config, loading, onReload }) {
+function ConfigPanel({ open, onClose, config, loading, onReload, issuesPath, onIssuesPathChange }) {
   const [target, setTarget] = useState('user');
   const [draft, setDraft] = useState(null);
+  const [issuesPathDraft, setIssuesPathDraft] = useState(issuesPath);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [saved, setSaved] = useState(false);
@@ -371,6 +373,10 @@ function ConfigPanel({ open, onClose, config, loading, onReload }) {
     setSaveError(null);
     setSaved(false);
   }, [config]);
+
+  useEffect(() => {
+    setIssuesPathDraft(issuesPath);
+  }, [issuesPath]);
 
   if (!open) return null;
 
@@ -429,6 +435,31 @@ function ConfigPanel({ open, onClose, config, loading, onReload }) {
             <div className="config-precedence">
               precedence: repo <strong>›</strong> user <strong>›</strong> built-in defaults
             </div>
+
+            <section className="config-section">
+              <div className="config-section-title">Control Center</div>
+              <ConfigField
+                label="Issues path"
+                hint="Repository-relative folder scanned recursively for Markdown issues. Existing run history remains visible even when it is outside this folder."
+              >
+                <input
+                  className="text-input"
+                  value={issuesPathDraft}
+                  onChange={(event) => setIssuesPathDraft(event.target.value)}
+                  placeholder="documentation/issues"
+                />
+              </ConfigField>
+              <div className="actions">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={!issuesPathDraft.trim() || issuesPathDraft.trim() === issuesPath}
+                  onClick={() => onIssuesPathChange(issuesPathDraft)}
+                >
+                  Apply issues path
+                </button>
+              </div>
+            </section>
 
             <section className="config-section">
               <div className="config-section-title">Agents</div>
@@ -681,6 +712,7 @@ function NewIssueModal({
   setDescription,
   mode,
   setMode,
+  issuesPath,
   action,
   onStart,
 }) {
@@ -757,8 +789,8 @@ function NewIssueModal({
         </div>
 
         <div className="new-run-note">
-          Neal keeps the canonical Markdown plan as an internal implementation detail.
-          The issue remains the UI-level object while the existing CLI and backend workflow stays unchanged.
+          New issues are stored under <code>{issuesPath}</code>. Neal keeps the canonical Markdown plan mechanics behind the UI,
+          while the existing CLI and backend workflow stays unchanged.
         </div>
 
         {action?.command ? (
@@ -804,9 +836,7 @@ function StatusPill({ lane }) {
   return <span className={'pill ' + lane}>{laneLabel(lane)}</span>;
 }
 
-function IssueList({ runs, selectedRunId, onSelect, onCommands, onConfig, onNewRun }) {
-  const issues = useMemo(() => groupRunsIntoIssues(runs), [runs]);
-
+function IssueList({ issues, selectedIssuePath, onSelect, onCommands, onConfig, onNewRun }) {
   return (
     <aside className="sidebar">
       <div className="brand-row">
@@ -825,27 +855,86 @@ function IssueList({ runs, selectedRunId, onSelect, onCommands, onConfig, onNewR
           <div className="muted">No issues yet.</div>
         ) : issues.map((issue) => {
           const run = issue.currentRun;
-          const active = issue.runs.some((candidate) => candidate.runId === selectedRunId);
+          const active = issue.planDoc === selectedIssuePath;
           return (
             <button
               type="button"
               className={'run-item ' + (active ? 'active' : '')}
               key={issue.key}
-              onClick={() => onSelect(run.runId)}
+              onClick={() => onSelect(issue)}
             >
               <div className="run-head">
                 <div className="run-title">{issue.title}</div>
-                <StatusPill lane={issueLane(run)} />
+                <StatusPill lane={run ? issueLane(run) : 'unprocessed'} />
               </div>
               <div className="run-meta-line">
-                <span>{issue.runs.length} {issue.runs.length === 1 ? 'attempt' : 'attempts'}</span>
-                <span>{run.topLevelMode === 'plan' && run.status === 'done' ? 'ready to execute' : run.publicPhase}</span>
+                <span>{run
+                  ? issue.runs.length + ' ' + (issue.runs.length === 1 ? 'attempt' : 'attempts')
+                  : 'not processed'}</span>
+                <span>{run
+                  ? (run.topLevelMode === 'plan' && run.status === 'done' ? 'ready to execute' : run.publicPhase)
+                  : issue.displayPath}</span>
               </div>
             </button>
           );
         })}
       </div>
     </aside>
+  );
+}
+
+function UnprocessedIssueDetail({ issue, file, onPlan }) {
+  const planning = issue?.action?.status === 'running';
+
+  return (
+    <>
+      <header className="topbar">
+        <div className="title-line">
+          <h1>{issue.title}</h1>
+          <span className="run-id">{issue.displayPath}</span>
+        </div>
+        <div className="top-actions">
+          <StatusPill lane="unprocessed" />
+        </div>
+      </header>
+
+      {issue?.action?.status === 'failed' ? (
+        <div className="global-error">Last UI action failed: {issue.action.error}</div>
+      ) : null}
+
+      <section className="card">
+        <div className="section-title">
+          <span>Issue</span>
+          <strong>Not processed by Neal yet</strong>
+        </div>
+        <p className="body-copy">
+          This Markdown file was discovered under the configured issues path and has no Neal run history.
+        </p>
+        <div className="actions">
+          <ActionButton kind="primary" disabled={planning} onClick={onPlan}>
+            {planning ? 'Planning…' : 'Plan issue'}
+          </ActionButton>
+        </div>
+        {planning && issue.action?.command ? (
+          <CommandLine command={issue.action.command} label="Running" />
+        ) : null}
+      </section>
+
+      <section className="card artifact-card">
+        {!file ? (
+          <div className="empty-inline">Loading issue…</div>
+        ) : (
+          <>
+            <SourceStrip sources={[{
+              label: 'Issue file',
+              path: file.path,
+              info: 'Unprocessed Markdown issue discovered from the configured Control Center issues path.',
+            }]} />
+            <MarkdownPreview content={file.content || '(empty)'} />
+          </>
+        )}
+      </section>
+    </>
   );
 }
 
