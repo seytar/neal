@@ -39,26 +39,6 @@ function basename(path) {
   return parts.at(-1) || String(path || 'Unknown plan');
 }
 
-function groupRunsIntoIssues(runs) {
-  const issues = new Map();
-  for (const run of runs) {
-    const key = String(run.planDoc || run.runId);
-    const existing = issues.get(key);
-    if (existing) {
-      existing.runs.push(run);
-      continue;
-    }
-    issues.set(key, {
-      key,
-      title: run.uiTitle || basename(run.planDoc),
-      planDoc: run.planDoc,
-      currentRun: run,
-      runs: [run],
-    });
-  }
-  return [...issues.values()];
-}
-
 function issueLane(run) {
   if (run?.topLevelMode === 'plan') {
     if (run.status === 'done') {
