@@ -45,6 +45,11 @@ function smokeScript(mode) {
       if (title) {
         document.body.dataset.smokeTitleWhiteSpace = getComputedStyle(title).whiteSpace;
       }
+      const runList = document.querySelector('.run-list');
+      if (runList) {
+        document.body.dataset.smokeIssueListOverflowY = getComputedStyle(runList).overflowY;
+      }
+      document.body.dataset.smokeBodyOverflow = getComputedStyle(document.body).overflow;
   `;
 
   if (mode === 'drag') {
@@ -259,6 +264,8 @@ try {
   assert.match(first, /neal/i);
   assert.match(first, /studio/i);
   assert.match(first, /data-smoke-title-white-space="normal"/);
+  assert.match(first, /data-smoke-issue-list-overflow-y="auto"/);
+  assert.match(first, /data-smoke-body-overflow="hidden"/);
   assert.match(first, /data-smoke-stored-width="440"/);
 
   const second = await dumpDom(baseUrl + '/?smoke=reload');
