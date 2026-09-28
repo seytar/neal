@@ -518,7 +518,7 @@ async function patchUiConfig(cwd: string, target: 'repo' | 'user', changes: Reco
   await writeTextAtomic(path, document.toString());
   clearConfigCache(cwd);
   try {
-    assertWriterProvidersConfigured(cwd, { context: 'Control Center config save' });
+    assertWriterProvidersConfigured(cwd, { context: 'Neal Studio config save' });
   } catch (error) {
     if (existed) {
       await writeTextAtomic(path, original);
@@ -941,7 +941,7 @@ function renderUiSeedPlan(title: string, description: string) {
     '',
     description.trim(),
     '',
-    '> Created from Neal Control Center. The planner should refine this seed into the canonical executable Neal plan format.',
+    '> Created from Neal Studio. The planner should refine this seed into the canonical executable Neal plan format.',
     '> Preserve the user\'s language for user-facing plan prose, summaries, review explanations, and operator questions. Do not translate the task merely for normalization. Keep code, identifiers, commands, filenames, and established technical terms as-is when appropriate.',
     '',
   ].join('\n');
