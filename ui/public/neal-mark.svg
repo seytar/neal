@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Neal">
+  <defs>
+    <mask id="neal-cut">
+      <rect width="64" height="64" fill="white"/>
+      <path d="M25 29h10l-6 6z" fill="black"/>
+    </mask>
+  </defs>
+  <path
+    d="M10 52V12h11l22 26V12h11v40H43L21 26v26z"
+    fill="#d98546"
+    mask="url(#neal-cut)"
+  />
+</svg>
