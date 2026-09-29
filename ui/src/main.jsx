@@ -808,8 +808,11 @@ function IssueList({
   return (
     <aside className="sidebar">
       <div className="brand-row">
-        <div className="brand">neal</div>
-        <span className="brand-tag studio">studio</span>
+        <div className="brand-lockup" aria-label="Neal Studio">
+          <img className="brand-mark" src="/neal-mark.svg" alt="" aria-hidden="true" />
+          <div className="brand">neal</div>
+          <span className="brand-tag studio">studio</span>
+        </div>
         <div className="sidebar-mini-actions">
           <button type="button" className="sidebar-command-button" onClick={onConfig}>config</button>
           <button type="button" className="sidebar-command-button" onClick={onCommands}>commands</button>
