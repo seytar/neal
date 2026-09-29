@@ -23,3 +23,12 @@ test('Studio blocked-run panel makes the reason and recovery actions visible', (
   assert.match(source, /Open review/);
   assert.match(source, /Raw Neal status:/);
 });
+
+
+test('Studio exposes the Neal brand mark and favicon asset', async () => {
+  assert.match(source, /className="brand-mark"/);
+  assert.match(source, /src="\/neal-mark\.svg"/);
+
+  const index = await readFile(new URL('../ui/index.html', import.meta.url), 'utf8');
+  assert.match(index, /rel="icon" href="\/neal-mark\.svg"/);
+});
