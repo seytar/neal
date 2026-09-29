@@ -14,6 +14,9 @@
   --studio-scroll-thumb: #33465c;
   --studio-scroll-thumb-hover: #4d6684;
   --studio-scroll-thumb-active: #6483aa;
+  --studio-brand: #d98546;
+  --studio-brand-muted: #b56f3a;
+  --studio-brand-wash: rgba(217, 133, 70, .10);
 }
 
 * {
@@ -141,6 +144,20 @@ body.studio-resizing .sidebar-resizer::after {
   padding: 2px 2px 10px;
 }
 
+.brand-lockup {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.brand-mark {
+  display: block;
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+}
+
 .brand {
   font-size: 17px;
   font-weight: 850;
@@ -159,9 +176,9 @@ body.studio-resizing .sidebar-resizer::after {
 }
 
 .brand-tag.studio {
-  color: #bfd0e8;
-  background: #1a293c;
-  border: 1px solid #2c4564;
+  color: #e8b98f;
+  background: var(--studio-brand-wash);
+  border: 1px solid rgba(217, 133, 70, .34);
 }
 
 .subtitle,
