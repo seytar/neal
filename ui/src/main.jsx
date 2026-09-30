@@ -1841,6 +1841,8 @@ function operatorRecommendationLabel(value) {
     keep_running: 'Keep running',
     wait: 'Wait',
     inspect_sources: 'Inspect sources',
+    inspect_runs: 'Inspect runs',
+    focus_run: 'Focus run',
     resume: 'Resume',
     provide_guidance: 'Provide guidance',
     manual_intervention: 'Manual intervention',
