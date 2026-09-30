@@ -39,7 +39,7 @@ test('Studio exposes run-scoped Ask Neal chat without bypassing existing actions
   assert.match(source, />\s*Ask Neal\s*</);
   assert.match(
     source,
-    /'\/api\/runs\/' \+ encodeURIComponent\(selectedRunId\) \+ '\/chat'/,
+    /'\/api\/runs\/' \+ encodeURIComponent\(requestRunId\) \+ '\/chat'/,
   );
   assert.match(source, /message\.action === 'resume'/);
   assert.match(source, /status\.resumeDecision\?\.kind === 'continue'/);
