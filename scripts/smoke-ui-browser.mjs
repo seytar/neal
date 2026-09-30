@@ -74,6 +74,22 @@ function smokeScript(mode) {
           document.body.dataset.smokeOriginalSource = originalSource ? 'true' : 'false';
         }, 250);
       }
+
+      const askNealButton = Array.from(document.querySelectorAll('button'))
+        .find((button) => button.textContent.trim() === 'Ask Neal');
+      document.body.dataset.smokeAskNealButton = askNealButton ? 'true' : 'false';
+      if (askNealButton) {
+        askNealButton.click();
+        setTimeout(() => {
+          document.body.dataset.smokeAskNealPanel =
+            document.querySelector('.operator-chat-panel') ? 'true' : 'false';
+          document.body.dataset.smokeAskNealShortcut =
+            Array.from(document.querySelectorAll('.operator-chat-shortcuts button'))
+              .some((button) => button.textContent.trim() === 'What do you need from me?')
+              ? 'true'
+              : 'false';
+        }, 250);
+      }
   `;
 
   if (mode === 'drag') {
@@ -284,6 +300,14 @@ const server = createServer((req, res) => {
       json(res, runDetail);
       return;
     }
+    if (url.pathname === '/api/runs/' + runId + '/chat') {
+      json(res, {
+        path: workspaceRoot + '/.neal/runs/' + runId + '/OPERATOR_CHAT.ndjson',
+        messages: [],
+        truncated: false,
+      });
+      return;
+    }
     if (url.pathname === '/api/runs/' + runId + '/activity') {
       json(res, {
         runId,
@@ -396,6 +420,9 @@ try {
   assert.match(first, /data-smoke-blocker-reason="ReasonSmoke blocker reason\."/);
   assert.match(first, /data-smoke-original-tab="true"/);
   assert.match(first, /data-smoke-original-source="true"/);
+  assert.match(first, /data-smoke-ask-neal-button="true"/);
+  assert.match(first, /data-smoke-ask-neal-panel="true"/);
+  assert.match(first, /data-smoke-ask-neal-shortcut="true"/);
   assert.match(first, /data-smoke-stored-width="440"/);
 
   const second = await dumpDom(baseUrl + '/?smoke=reload');
