@@ -48,3 +48,15 @@ test('Studio exposes run-scoped Ask Neal chat without bypassing existing actions
   assert.match(source, /status\.resumeDecision\?\.kind === 'needs_message'/);
   assert.match(source, /onAction\('guidance', \{ message: message\.guidanceMessage \}\)/);
 });
+
+
+test('Studio config exposes independent Ask Neal provider/model/effort controls', () => {
+  assert.match(source, /function ChatConfigCard\(/);
+  assert.match(source, /<strong>Ask Neal<\/strong>/);
+  assert.match(source, /<option value="">inherit reviewer<\/option>/);
+  assert.match(source, /changes\['studio\.chat\.provider'\]/);
+  assert.match(source, /changes\['studio\.chat\.model'\]/);
+  assert.match(source, /changes\['studio\.chat\.effort'\]/);
+  assert.match(source, /config\.chat\?\.inheritReviewer/);
+  assert.match(source, /config\.roleOptions\.chat/);
+});
