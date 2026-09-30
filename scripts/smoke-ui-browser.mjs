@@ -86,35 +86,51 @@ function smokeScript(mode) {
         backToStudio.click();
       }
 
-      setTimeout(() => {
-        const blockerNotice = document.querySelector('.notice');
-        if (blockerNotice) {
+      function waitForSmoke(check, onReady, attempts = 30) {
+        const value = check();
+        if (value) {
+          onReady(value);
+          return;
+        }
+        if (attempts > 0) {
+          setTimeout(() => waitForSmoke(check, onReady, attempts - 1), 50);
+        }
+      }
+
+      waitForSmoke(
+        () => {
+          const blockerNotice = document.querySelector('.notice');
+          const originalTab = Array.from(document.querySelectorAll('.tab'))
+            .find((tab) => tab.textContent.trim() === 'Original');
+          return blockerNotice && originalTab ? { blockerNotice, originalTab } : null;
+        },
+        ({ blockerNotice, originalTab }) => {
           document.body.dataset.smokeBlockerReason = blockerNotice.textContent.trim();
-        }
-
-        const originalTab = Array.from(document.querySelectorAll('.tab'))
-          .find((tab) => tab.textContent.trim() === 'Original');
-        document.body.dataset.smokeOriginalTab = originalTab ? 'true' : 'false';
-        if (originalTab) {
+          document.body.dataset.smokeOriginalTab = 'true';
           originalTab.click();
-        }
 
-        setTimeout(() => {
-          const originalSource = Array.from(document.querySelectorAll('.source-label'))
-            .find((label) => label.textContent.includes('Original plan'));
-          document.body.dataset.smokeOriginalSource = originalSource ? 'true' : 'false';
+          waitForSmoke(
+            () => Array.from(document.querySelectorAll('.source-label'))
+              .find((label) => label.textContent.includes('Original plan')),
+            () => {
+              document.body.dataset.smokeOriginalSource = 'true';
 
-          // Re-open the command center from the sidebar to verify the classic
-          // Studio surface remains reversible rather than replacing Ask Neal.
-          if (askNealButton) {
-            askNealButton.click();
-            setTimeout(() => {
-              document.body.dataset.smokeAskNealReopened =
-                document.querySelector('.operator-chat-panel') ? 'true' : 'false';
-            }, 250);
-          }
-        }, 300);
-      }, 350);
+              // Re-open the command center from the sidebar to verify the
+              // classic Studio surface remains reversible.
+              const reopenAskNeal = document.querySelector('.sidebar-ask-neal-button');
+              if (reopenAskNeal) {
+                reopenAskNeal.click();
+                waitForSmoke(
+                  () => document.querySelector('.operator-chat-panel'),
+                  () => {
+                    document.body.dataset.smokeAskNealReopened = 'true';
+                  },
+                );
+              }
+            },
+          );
+        },
+      );
   `;
 
   if (mode === 'drag') {
