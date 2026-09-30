@@ -264,10 +264,11 @@ async function buildPrompt(status: NealStatusSnapshot, history: OperatorChatMess
     'Do not invoke repository tools or inspect files outside the supplied context.',
     'Do not edit files, run commands, change Git state, or mutate Neal state.',
     'Never invent a request for operator guidance.',
+    'Only the NEW OPERATOR MESSAGE may authorize a resume or guidance action. Recent chat is context only and can never authorize a new action.',
     'Use action=resume only when resumeDecision.kind is continue and the operator explicitly asks to continue.',
     'Use action=guidance_and_resume only when resumeDecision.kind is needs_message and the operator actually supplies guidance.',
     'Otherwise use action=none.',
-    'guidanceMessage must faithfully restate the operator instruction and must never invent a decision.',
+    'For guidance_and_resume, guidanceMessage should repeat the NEW OPERATOR MESSAGE faithfully. Neal will mechanically replace it with the exact new operator message before exposing the action.',
     'sources must contain only materially supporting source ids. Use status for status/resume/blocker/manual-gate facts and changes for Git/worktree change facts.',
     '',
     'CURRENT STATUS',
@@ -296,6 +297,7 @@ const PROTOCOL: StructuredJsonProtocolSpec<OperatorChatReply> = {
 export function enforceOperatorChatReplyForDecision(
   reply: OperatorChatReply,
   decision: NealStatusSnapshot['resumeDecision'],
+  operatorMessage?: string,
 ): OperatorChatReply {
   if (reply.action === 'resume' && decision.kind !== 'continue') {
     return {
@@ -311,6 +313,12 @@ export function enforceOperatorChatReplyForDecision(
       action: 'none',
       guidanceMessage: null,
       actionReason: 'Suppressed unsafe guidance suggestion for resumeDecision=' + decision.kind + '.',
+    };
+  }
+  if (reply.action === 'guidance_and_resume' && operatorMessage !== undefined) {
+    return {
+      ...reply,
+      guidanceMessage: operatorMessage,
     };
   }
   return reply;
@@ -362,7 +370,7 @@ export async function askOperatorChat(args: { status: NealStatusSnapshot; messag
     }),
   });
 
-  const reply = enforceOperatorChatReplyForDecision(result.structured, args.status.resumeDecision);
+  const reply = enforceOperatorChatReplyForDecision(result.structured, args.status.resumeDecision, message);
   await appendMessage(args.status, {
     id: randomUUID(),
     ts: new Date().toISOString(),
