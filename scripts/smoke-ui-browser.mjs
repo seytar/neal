@@ -58,46 +58,63 @@ function smokeScript(mode) {
         .filter(Boolean);
       document.body.dataset.smokeStatusPills = pills.join('|');
 
-      const blockerNotice = document.querySelector('.notice');
-      if (blockerNotice) {
-        document.body.dataset.smokeBlockerReason = blockerNotice.textContent.trim();
-      }
-
-      const originalTab = Array.from(document.querySelectorAll('.tab'))
-        .find((tab) => tab.textContent.trim() === 'Original');
-      document.body.dataset.smokeOriginalTab = originalTab ? 'true' : 'false';
-      if (originalTab) {
-        originalTab.click();
-        setTimeout(() => {
-          const originalSource = Array.from(document.querySelectorAll('.source-label'))
-            .find((label) => label.textContent.includes('Original plan'));
-          document.body.dataset.smokeOriginalSource = originalSource ? 'true' : 'false';
-        }, 250);
-      }
-
       const newTaskButton = Array.from(document.querySelectorAll('.new-run-button'))
         .find((button) => button.textContent.trim() === '+ New Task');
       document.body.dataset.smokeNewTaskButton = newTaskButton ? 'true' : 'false';
 
       const askNealButton = document.querySelector('.sidebar-ask-neal-button');
       document.body.dataset.smokeAskNealButton = askNealButton ? 'true' : 'false';
-      if (askNealButton) {
-        askNealButton.click();
-        setTimeout(() => {
-          document.body.dataset.smokeAskNealPanel =
-            document.querySelector('.operator-chat-panel') ? 'true' : 'false';
-          document.body.dataset.smokeAskNealWorkspaceScope =
-            Array.from(document.querySelectorAll('.operator-chat-scope button'))
-              .some((button) => button.textContent.trim() === 'Workspace' && button.classList.contains('active'))
-              ? 'true'
-              : 'false';
-          document.body.dataset.smokeAskNealShortcut =
-            Array.from(document.querySelectorAll('.operator-chat-shortcuts button'))
-              .some((button) => button.textContent.trim() === 'What needs my attention?')
-              ? 'true'
-              : 'false';
-        }, 250);
+      document.body.dataset.smokeAskNealPanel =
+        document.querySelector('.operator-chat-panel') ? 'true' : 'false';
+      document.body.dataset.smokeAskNealWorkspaceScope =
+        Array.from(document.querySelectorAll('.operator-chat-scope button'))
+          .some((button) => button.textContent.trim() === 'Workspace' && button.classList.contains('active'))
+          ? 'true'
+          : 'false';
+      document.body.dataset.smokeAskNealShortcut =
+        Array.from(document.querySelectorAll('.operator-chat-shortcuts button'))
+          .some((button) => button.textContent.trim() === 'What needs my attention?')
+          ? 'true'
+          : 'false';
+
+      // Ask Neal is now the default Studio home. Exercise that first, then
+      // return to the selected issue before checking classic run details.
+      const backToStudio = Array.from(document.querySelectorAll('button'))
+        .find((button) => button.textContent.trim() === 'Back to Studio');
+      document.body.dataset.smokeBackToStudio = backToStudio ? 'true' : 'false';
+      if (backToStudio) {
+        backToStudio.click();
       }
+
+      setTimeout(() => {
+        const blockerNotice = document.querySelector('.notice');
+        if (blockerNotice) {
+          document.body.dataset.smokeBlockerReason = blockerNotice.textContent.trim();
+        }
+
+        const originalTab = Array.from(document.querySelectorAll('.tab'))
+          .find((tab) => tab.textContent.trim() === 'Original');
+        document.body.dataset.smokeOriginalTab = originalTab ? 'true' : 'false';
+        if (originalTab) {
+          originalTab.click();
+        }
+
+        setTimeout(() => {
+          const originalSource = Array.from(document.querySelectorAll('.source-label'))
+            .find((label) => label.textContent.includes('Original plan'));
+          document.body.dataset.smokeOriginalSource = originalSource ? 'true' : 'false';
+
+          // Re-open the command center from the sidebar to verify the classic
+          // Studio surface remains reversible rather than replacing Ask Neal.
+          if (askNealButton) {
+            askNealButton.click();
+            setTimeout(() => {
+              document.body.dataset.smokeAskNealReopened =
+                document.querySelector('.operator-chat-panel') ? 'true' : 'false';
+            }, 250);
+          }
+        }, 300);
+      }, 350);
   `;
 
   if (mode === 'drag') {
@@ -441,6 +458,8 @@ try {
   assert.match(first, /data-smoke-ask-neal-panel="true"/);
   assert.match(first, /data-smoke-ask-neal-workspace-scope="true"/);
   assert.match(first, /data-smoke-ask-neal-shortcut="true"/);
+  assert.match(first, /data-smoke-back-to-studio="true"/);
+  assert.match(first, /data-smoke-ask-neal-reopened="true"/);
   assert.match(first, /data-smoke-stored-width="440"/);
 
   const second = await dumpDom(baseUrl + '/?smoke=reload');
