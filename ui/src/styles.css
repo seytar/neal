@@ -2466,6 +2466,64 @@ pre { font-size: 11px; }
   font: 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+.operator-chat-observation,
+.operator-chat-decision {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px;
+  background: #0d151c;
+  border: 1px solid #263542;
+  border-radius: 6px;
+}
+
+.operator-chat-observation.attention-watch {
+  border-color: #4b4631;
+}
+
+.operator-chat-observation.attention-decision_needed,
+.operator-chat-observation.attention-action_needed,
+.operator-chat-decision {
+  border-color: rgba(217, 133, 70, .28);
+  background: rgba(217, 133, 70, .055);
+}
+
+.operator-chat-insight-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.operator-chat-insight-head strong {
+  color: #d8e2eb;
+  font-size: 8px;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+
+.operator-chat-insight-head span {
+  color: #b99a7d;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.operator-chat-observation p,
+.operator-chat-decision p {
+  margin: 0;
+  color: #aebdca;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.operator-chat-decision ul {
+  margin: 0;
+  padding-left: 16px;
+  color: #9fb0bf;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
 .operator-chat-sources {
   display: flex;
   flex-wrap: wrap;
