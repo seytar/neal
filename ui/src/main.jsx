@@ -204,6 +204,11 @@ function configDraftFromSnapshot(config) {
       model: config.roles.reviewer.model || '',
       effort: config.roles.reviewer.effort || '',
     },
+    chat: {
+      provider: config.chat?.inheritReviewer ? '' : (config.chat?.provider || ''),
+      model: config.chat?.inheritReviewer ? '' : (config.chat?.model || ''),
+      effort: config.chat?.inheritReviewer ? '' : (config.chat?.effort || ''),
+    },
     reviewLevel: config.runtime.review_level.value || 'moderate',
     openaiCompatible: {
       baseUrl: config.openaiCompatible.baseUrl || '',
@@ -228,6 +233,24 @@ function configChanges(config, draft) {
     }
     if (draft[role].effort !== (current.effort || '')) {
       changes['agent.' + role + '.effort'] = draft[role].effort || null;
+    }
+  }
+
+  if (!draft.chat.provider) {
+    if (!config.chat.inheritReviewer) {
+      changes['studio.chat.provider'] = null;
+      changes['studio.chat.model'] = null;
+      changes['studio.chat.effort'] = null;
+    }
+  } else {
+    if (config.chat.inheritReviewer || draft.chat.provider !== (config.chat.provider || '')) {
+      changes['studio.chat.provider'] = draft.chat.provider;
+    }
+    if (config.chat.inheritReviewer || draft.chat.model !== (config.chat.model || '')) {
+      changes['studio.chat.model'] = draft.chat.model || null;
+    }
+    if (config.chat.inheritReviewer || draft.chat.effort !== (config.chat.effort || '')) {
+      changes['studio.chat.effort'] = draft.chat.effort || null;
     }
   }
 
@@ -315,6 +338,87 @@ function RoleConfigCard({ role, config, draft, setDraft }) {
           value={draft[role].effort}
           onChange={(event) => setField('effort', event.target.value)}
           disabled={effortOptions.length === 0}
+        >
+          <option value="">provider default</option>
+          {effortOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </ConfigField>
+    </section>
+  );
+}
+
+
+function ChatConfigCard({ config, draft, setDraft }) {
+  const inherited = !draft.chat.provider;
+  const provider = inherited ? config.roles.reviewer.provider : draft.chat.provider;
+  const effortOptions = config.providerEfforts[provider] || [];
+  const providerOptions = config.roleOptions.chat || [];
+
+  function setField(field, value) {
+    setDraft((current) => ({
+      ...current,
+      chat: { ...current.chat, [field]: value },
+    }));
+  }
+
+  return (
+    <section className="config-role-card config-chat-card">
+      <div className="config-role-head">
+        <strong>Ask Neal</strong>
+        <span>{inherited ? 'inherits Reviewer · ' : ''}{modelLabel(config.chat)}</span>
+      </div>
+
+      <ConfigField
+        label="Provider"
+        source={config.chat.sources.provider}
+        hint="Inherit Reviewer keeps chat aligned with the Reviewer configuration. Pick a provider to tune chat independently."
+      >
+        <select
+          value={draft.chat.provider}
+          onChange={(event) => {
+            const nextProvider = event.target.value;
+            setDraft((current) => ({
+              ...current,
+              chat: {
+                provider: nextProvider,
+                model: nextProvider ? '' : '',
+                effort: nextProvider ? '' : '',
+              },
+            }));
+          }}
+        >
+          <option value="">inherit reviewer</option>
+          {providerOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </ConfigField>
+
+      <ConfigField
+        label="Model"
+        source={config.chat.sources.model}
+        hint={inherited ? 'Inherited from Reviewer.' : 'Blank means the selected provider default.'}
+      >
+        <input
+          className="text-input"
+          value={draft.chat.model}
+          onChange={(event) => setField('model', event.target.value)}
+          placeholder={inherited ? (config.roles.reviewer.model || 'reviewer provider default') : 'provider default'}
+          disabled={inherited}
+        />
+      </ConfigField>
+
+      <ConfigField
+        label="Effort"
+        source={config.chat.sources.effort}
+        hint={inherited
+          ? 'Inherited from Reviewer.'
+          : effortOptions.length
+            ? 'Provider-supported reasoning depth.'
+            : 'This provider has no configurable effort.'}
+      >
+        <select
+          value={draft.chat.effort}
+          onChange={(event) => setField('effort', event.target.value)}
+          disabled={inherited || effortOptions.length === 0}
         >
           <option value="">provider default</option>
           {effortOptions.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -437,6 +541,17 @@ function ConfigPanel({ open, onClose, config, loading, onReload, issuesPath, onI
                     setDraft={setDraft}
                   />
                 ))}
+              </div>
+            </section>
+
+            <section className="config-section">
+              <div className="config-section-title">Ask Neal</div>
+              <div className="config-role-grid config-chat-grid">
+                <ChatConfigCard
+                  config={config}
+                  draft={draft}
+                  setDraft={setDraft}
+                />
               </div>
             </section>
 
@@ -570,8 +685,11 @@ function ConfigPanel({ open, onClose, config, loading, onReload, issuesPath, onI
               </div>
             </div>
 
-            {target === 'user' && Object.values(config.roles).some((role) =>
-              Object.values(role.sources).some((source) => source.kind === 'repo')
+            {target === 'user' && (
+              Object.values(config.roles).some((role) =>
+                Object.values(role.sources).some((source) => source.kind === 'repo')
+              ) ||
+              Object.values(config.chat.sources).some((source) => source.kind === 'repo')
             ) ? (
               <div className="notice">
                 Some effective agent values come from repo <code>neal.yml</code>. Saving the same keys to User config will not override those repo values.
