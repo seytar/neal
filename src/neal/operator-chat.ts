@@ -4,9 +4,9 @@ import { join } from 'node:path';
 
 import {
   getApiRetryLimit,
-  getDefaultReviewerEffort,
-  getDefaultReviewerModel,
-  getDefaultReviewerProvider,
+  getStudioChatEffort,
+  getStudioChatModel,
+  getStudioChatProvider,
   getInactivityTimeoutMs,
 } from './config.js';
 import { buildRunChangesSnapshot } from './changes.js';
@@ -332,14 +332,14 @@ export async function askOperatorChat(args: { status: NealStatusSnapshot; messag
   }
 
   const history = await readOperatorChatHistory(args.status);
-  const provider = getDefaultReviewerProvider(args.status.cwd);
-  const reviewerConfig = {
+  const provider = getStudioChatProvider(args.status.cwd);
+  const chatConfig = {
     provider,
-    model: getDefaultReviewerModel(args.status.cwd),
-    effort: getDefaultReviewerEffort(args.status.cwd),
+    model: getStudioChatModel(args.status.cwd),
+    effort: getStudioChatEffort(args.status.cwd),
   };
 
-  assertProviderSupportsStructuredAdvisor(reviewerConfig, {
+  assertProviderSupportsStructuredAdvisor(chatConfig, {
     role: 'reviewer',
     context: 'Neal Studio operator chat',
     reason: 'operator chat must use a read-only structured-advisor and schema-validated output',
@@ -353,7 +353,7 @@ export async function askOperatorChat(args: { status: NealStatusSnapshot; messag
     text: message,
   });
 
-  const result = await getStructuredAdvisorAdapter(reviewerConfig).runStructuredRound<OperatorChatReply>({
+  const result = await getStructuredAdvisorAdapter(chatConfig).runStructuredRound<OperatorChatReply>({
     label: 'support',
     cwd: args.status.cwd,
     prompt: await buildPrompt(args.status, history.messages, message),
@@ -361,7 +361,7 @@ export async function askOperatorChat(args: { status: NealStatusSnapshot; messag
     structuredJsonProtocol: PROTOCOL,
     inactivityTimeoutMs: getInactivityTimeoutMs(args.status.cwd),
     apiRetryLimit: getApiRetryLimit(args.status.cwd),
-    model: reviewerConfig.model,
+    model: chatConfig.model,
     events: createProviderTelemetrySink({
       provider,
       role: 'structured-advisor',
