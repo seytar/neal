@@ -38,6 +38,9 @@ import {
   getPlanReviewDebtRoundThreshold,
   getReviewLevel,
   getReviewStuckWindow,
+  getStudioChatEffort,
+  getStudioChatModel,
+  getStudioChatProvider,
   type NealConfigFile,
 } from './config.js';
 import { runNewRunCommand } from './commands/new-run.js';
@@ -317,6 +320,35 @@ function roleFieldSource(
   return direct;
 }
 
+function studioChatFieldSource(
+  field: 'provider' | 'model' | 'effort',
+  repoConfig: NealConfigFile,
+  userConfig: NealConfigFile,
+  sources: ReturnType<typeof getConfigSourceInfo>,
+): UiConfigSource {
+  const directKey = `studio.chat.${field}`;
+  const direct = configSourceFor(repoConfig, userConfig, sources, directKey);
+  if (direct.kind !== 'default') {
+    return direct;
+  }
+
+  const chatProviderExplicit =
+    hasOwnNested(repoConfig, ['studio', 'chat', 'provider']) ||
+    hasOwnNested(userConfig, ['studio', 'chat', 'provider']);
+
+  if (chatProviderExplicit) {
+    return direct;
+  }
+
+  const reviewer = configSourceFor(repoConfig, userConfig, sources, `agent.reviewer.${field}`);
+  return {
+    ...reviewer,
+    kind: 'inherited',
+    key: directKey,
+    note: `inherits agent.reviewer.${field}${reviewer.path ? ` from ${reviewer.path}` : ''}`,
+  };
+}
+
 async function readUiConfigFile(path: string, exists: boolean): Promise<NealConfigFile> {
   if (!exists) {
     return {};
@@ -351,6 +383,21 @@ async function buildUiConfigSnapshot(cwd: string) {
       provider: getDefaultReviewerProvider(cwd),
       model: getDefaultReviewerModel(cwd),
       effort: getDefaultReviewerEffort(cwd),
+    },
+  };
+
+  const chatProviderExplicit =
+    hasOwnNested(repoConfig, ['studio', 'chat', 'provider']) ||
+    hasOwnNested(userConfig, ['studio', 'chat', 'provider']);
+  const chat = {
+    provider: getStudioChatProvider(cwd),
+    model: getStudioChatModel(cwd),
+    effort: getStudioChatEffort(cwd),
+    inheritReviewer: !chatProviderExplicit,
+    sources: {
+      provider: studioChatFieldSource('provider', repoConfig, userConfig, sources),
+      model: studioChatFieldSource('model', repoConfig, userConfig, sources),
+      effort: studioChatFieldSource('effort', repoConfig, userConfig, sources),
     },
   };
 
@@ -390,10 +437,12 @@ async function buildUiConfigSnapshot(cwd: string) {
     sources,
     precedence: ['repo neal.yml', 'user ~/.neal/config.yml', 'built-in defaults'],
     roles,
+    chat,
     roleOptions: {
       planner: definitions.filter((d) => d.capabilities.coder.supported).map((d) => d.id),
       coder: definitions.filter((d) => d.capabilities.coder.supported).map((d) => d.id),
       reviewer: definitions.filter((d) => d.capabilities['structured-advisor'].supported).map((d) => d.id),
+      chat: definitions.filter((d) => d.capabilities['structured-advisor'].supported).map((d) => d.id),
     },
     providerEfforts: Object.fromEntries(
       definitions.map((definition) => [
@@ -455,6 +504,9 @@ const UI_CONFIG_KEYS = new Set([
   'agent.reviewer.provider',
   'agent.reviewer.model',
   'agent.reviewer.effort',
+  'studio.chat.provider',
+  'studio.chat.model',
+  'studio.chat.effort',
   'neal.review_level',
   'providers.openai_compatible.base_url',
   'providers.openai_compatible.api_key_env',
@@ -472,7 +524,7 @@ function normalizeUiConfigValue(key: string, value: unknown) {
   const trimmed = typeof value === 'string' ? value.trim() : null;
 
   if (key.endsWith('.provider') && trimmed === null) {
-    if (key !== 'agent.planner.provider') {
+    if (key !== 'agent.planner.provider' && key !== 'studio.chat.provider') {
       throw new UiHttpError(400, `${key} cannot be unset.`);
     }
     return { operation: 'delete' as const, value: null };
@@ -483,6 +535,9 @@ function normalizeUiConfigValue(key: string, value: unknown) {
   if (key === 'providers.openai_compatible.structured_output_mode' && trimmed !== null &&
       !['json_schema', 'json_object'].includes(trimmed)) {
     throw new UiHttpError(400, 'structured_output_mode must be json_schema, json_object, or null.');
+  }
+  if ((key === 'studio.chat.model' || key === 'studio.chat.effort') && trimmed === null) {
+    return { operation: 'delete' as const, value: null };
   }
   if (key.endsWith('.effort') && trimmed === null) {
     return { operation: 'delete' as const, value: null };
