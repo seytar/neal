@@ -214,14 +214,20 @@ async function buildPrompt(status: NealStatusSnapshot, history: OperatorChatMess
     if (content !== null) renderedArtifacts.push('SOURCE ' + id + '\n' + content);
   }
 
-  const changes = await buildRunChangesSnapshot({ cwd: status.cwd, runId: status.runId });
-  const renderedChanges = JSON.stringify(changes, null, 2);
-  renderedArtifacts.push(
-    'SOURCE changes\n' +
-    (renderedChanges.length > MAX_ARTIFACT_CHARS
-      ? renderedChanges.slice(0, MAX_ARTIFACT_CHARS) + '\n[truncated by operator chat]'
-      : renderedChanges),
-  );
+  try {
+    const changes = await buildRunChangesSnapshot({ cwd: status.cwd, runId: status.runId });
+    const renderedChanges = JSON.stringify(changes, null, 2);
+    renderedArtifacts.push(
+      'SOURCE changes\n' +
+      (renderedChanges.length > MAX_ARTIFACT_CHARS
+        ? renderedChanges.slice(0, MAX_ARTIFACT_CHARS) + '\n[truncated by operator chat]'
+        : renderedChanges),
+    );
+  } catch (error) {
+    renderedArtifacts.push(
+      'SOURCE changes\nUnavailable: ' + (error instanceof Error ? error.message : String(error)),
+    );
+  }
 
   const statusContext = {
     runId: status.runId,
