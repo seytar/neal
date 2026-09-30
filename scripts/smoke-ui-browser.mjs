@@ -75,6 +75,10 @@ function smokeScript(mode) {
         }, 250);
       }
 
+      const newTaskButton = Array.from(document.querySelectorAll('.new-run-button'))
+        .find((button) => button.textContent.trim() === '+ New Task');
+      document.body.dataset.smokeNewTaskButton = newTaskButton ? 'true' : 'false';
+
       const askNealButton = document.querySelector('.sidebar-ask-neal-button');
       document.body.dataset.smokeAskNealButton = askNealButton ? 'true' : 'false';
       if (askNealButton) {
@@ -432,6 +436,7 @@ try {
   assert.match(first, /data-smoke-blocker-reason="ReasonSmoke blocker reason\."/);
   assert.match(first, /data-smoke-original-tab="true"/);
   assert.match(first, /data-smoke-original-source="true"/);
+  assert.match(first, /data-smoke-new-task-button="true"/);
   assert.match(first, /data-smoke-ask-neal-button="true"/);
   assert.match(first, /data-smoke-ask-neal-panel="true"/);
   assert.match(first, /data-smoke-ask-neal-workspace-scope="true"/);
