@@ -556,9 +556,12 @@ function normalizeUiConfigValue(key: string, value: unknown) {
     return { operation: 'delete' as const, value: null };
   }
   if (key.endsWith('.provider') && trimmed !== null) {
-    const registered = listRegisteredProviderDefinitions().some((definition) => definition.id === trimmed);
-    if (!registered) {
+    const definition = listRegisteredProviderDefinitions().find((candidate) => candidate.id === trimmed);
+    if (!definition) {
       throw new UiHttpError(400, `Unknown provider: ${trimmed}`);
+    }
+    if (key === 'studio.chat.provider' && !definition.capabilities['structured-advisor'].supported) {
+      throw new UiHttpError(400, `Provider ${trimmed} does not support Studio chat structured-advisor calls.`);
     }
   }
   return { operation: 'set' as const, value: trimmed };
