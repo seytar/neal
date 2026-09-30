@@ -75,3 +75,26 @@ test('Studio exposes workspace Ask Neal from the sidebar', () => {
   assert.match(source, /onAskNeal=\{openWorkspaceChat\}/);
   assert.match(source, /onFocusRun=\{focusChatRun\}/);
 });
+
+
+test('Studio centers new task creation on Ask Neal while preserving the direct form fallback', () => {
+  assert.match(source, />\+ New Task</);
+  assert.match(source, /onClick=\{onNewTask\}/);
+  assert.match(source, /Direct issue form/);
+  assert.match(source, /const openNewTaskChat = useCallback/);
+  assert.match(source, /I want to start a new task\. Help me define it\./);
+  assert.match(source, /operator-chat-task-proposal/);
+  assert.match(source, /message\.id === actionableMessageId/);
+  assert.match(source, /onTaskProposalCreate\(message\.taskProposal\)/);
+  assert.match(source, /onTaskProposalEdit\(message\.taskProposal\)/);
+  assert.match(source, /const createTaskProposal = useCallback/);
+  assert.match(source, /'\/api\/new-run\/plan'/);
+  assert.match(source, /preferredExecutionMode: mode/);
+});
+
+test('Workspace Ask Neal remains available before any issue or run exists', () => {
+  assert.match(source, /chatScope === 'workspace' \|\| selectedRunId/);
+  assert.match(source, /onAskNeal=\{openWorkspaceChat\}/);
+  assert.match(source, /onNewTask=\{openNewTaskChat\}/);
+  assert.match(source, /No issues yet\. Start with/);
+});
