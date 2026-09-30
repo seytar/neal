@@ -432,7 +432,7 @@ async function dumpDom(url) {
       '--disable-gpu',
       '--disable-dev-shm-usage',
       '--user-data-dir=' + profileDir,
-      '--virtual-time-budget=3000',
+      '--virtual-time-budget=6000',
       '--dump-dom',
       url,
     ], {
