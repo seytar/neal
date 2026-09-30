@@ -43,6 +43,7 @@ import {
 import { runNewRunCommand } from './commands/new-run.js';
 import { runResumeRunCommand } from './commands/resume-run.js';
 import { runShadowCommand } from './commands/shadow.js';
+import { askOperatorChat, readOperatorChatHistory } from './operator-chat.js';
 import { resolveRunStatePath } from './run-registry.js';
 import { listRegisteredProviderDefinitions } from './providers/registry.js';
 import { getExecutionPlanPath, getExecutionPlanScopeCount } from './scopes.js';
@@ -1352,6 +1353,21 @@ async function handleApi(
 
   if (req.method === 'GET' && parts[3] === 'usage' && parts.length === 4) {
     json(res, 200, await buildRunUsageSnapshot({ cwd: ctx.cwd, runId }));
+    return;
+  }
+
+  if (req.method === 'GET' && parts[3] === 'chat' && parts.length === 4) {
+    const detail = await buildRunDetail(ctx, runId);
+    json(res, 200, await readOperatorChatHistory(detail.status));
+    return;
+  }
+
+  if (req.method === 'POST' && parts[3] === 'chat' && parts.length === 4) {
+    requireWriteToken(req, ctx.token);
+    const body = await readJsonBody(req);
+    const message = requireString(body, 'message');
+    const detail = await buildRunDetail(ctx, runId);
+    json(res, 200, await askOperatorChat({ status: detail.status, message }));
     return;
   }
 
