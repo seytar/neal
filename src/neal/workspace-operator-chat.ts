@@ -30,7 +30,14 @@ export type WorkspaceChatRecommendation =
   | 'inspect_runs'
   | 'focus_run'
   | 'manual_intervention'
-  | 'replan';
+  | 'replan'
+  | 'create_task';
+
+export type WorkspaceTaskProposal = {
+  title: string;
+  description: string;
+  preferredExecutionMode: 'shadow' | 'normal';
+};
 
 export type WorkspaceChatRunContext = {
   runId: string;
@@ -60,6 +67,7 @@ export type WorkspaceChatMessage = {
   recommendationReason?: string | null;
   decisionOptions?: string[];
   focusRunIds?: string[];
+  taskProposal?: WorkspaceTaskProposal | null;
 };
 
 export type WorkspaceChatReply = {
@@ -70,6 +78,7 @@ export type WorkspaceChatReply = {
   recommendationReason: string | null;
   decisionOptions: string[];
   focusRunIds: string[];
+  taskProposal: WorkspaceTaskProposal | null;
 };
 
 const REPLY_SCHEMA = {
@@ -80,11 +89,26 @@ const REPLY_SCHEMA = {
     attention: { type: 'string', enum: ['normal', 'watch', 'decision_needed', 'action_needed'] },
     recommendation: {
       type: 'string',
-      enum: ['none', 'keep_running', 'wait', 'inspect_runs', 'focus_run', 'manual_intervention', 'replan'],
+      enum: ['none', 'keep_running', 'wait', 'inspect_runs', 'focus_run', 'manual_intervention', 'replan', 'create_task'],
     },
     recommendationReason: { type: ['string', 'null'] },
     decisionOptions: { type: 'array', items: { type: 'string' }, maxItems: 4 },
     focusRunIds: { type: 'array', items: { type: 'string' }, maxItems: 5 },
+    taskProposal: {
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            description: { type: 'string' },
+            preferredExecutionMode: { type: 'string', enum: ['shadow', 'normal'] },
+          },
+          required: ['title', 'description', 'preferredExecutionMode'],
+          additionalProperties: false,
+        },
+        { type: 'null' },
+      ],
+    },
   },
   required: [
     'answer',
@@ -94,6 +118,7 @@ const REPLY_SCHEMA = {
     'recommendationReason',
     'decisionOptions',
     'focusRunIds',
+    'taskProposal',
   ],
   additionalProperties: false,
 } as const;
@@ -114,7 +139,8 @@ function isRecommendation(value: unknown): value is WorkspaceChatRecommendation 
     value === 'inspect_runs' ||
     value === 'focus_run' ||
     value === 'manual_intervention' ||
-    value === 'replan'
+    value === 'replan' ||
+    value === 'create_task'
   );
 }
 
@@ -134,6 +160,19 @@ function nullableString(value: unknown, name: string) {
   if (value === null) return null;
   if (typeof value !== 'string') throw new Error(name + ' must be string or null.');
   return value.trim() || null;
+}
+
+function parseTaskProposal(value: unknown): WorkspaceTaskProposal | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const proposal = value as Record<string, unknown>;
+  const title = typeof proposal.title === 'string' ? proposal.title.trim() : '';
+  const description = typeof proposal.description === 'string' ? proposal.description.trim() : '';
+  const preferredExecutionMode =
+    proposal.preferredExecutionMode === 'normal' ? 'normal' :
+    proposal.preferredExecutionMode === 'shadow' ? 'shadow' :
+    null;
+  if (!title || !description || !preferredExecutionMode) return null;
+  return { title, description, preferredExecutionMode };
 }
 
 function parseHistoryMessage(line: string): WorkspaceChatMessage | null {
@@ -164,6 +203,7 @@ function parseHistoryMessage(line: string): WorkspaceChatMessage | null {
           : null,
       decisionOptions: uniqueStrings(value.decisionOptions, 4),
       focusRunIds: uniqueStrings(value.focusRunIds, 5),
+      taskProposal: parseTaskProposal(value.taskProposal),
     };
   } catch {
     return null;
@@ -208,6 +248,16 @@ export function validateWorkspaceChatReply(
   if (value.recommendation === 'focus_run' && focusRunIds.length === 0) {
     throw new Error('focus_run recommendation requires at least one focusRunId.');
   }
+  const taskProposal = value.taskProposal === null ? null : parseTaskProposal(value.taskProposal);
+  if (value.taskProposal !== null && !taskProposal) {
+    throw new Error('Workspace chat taskProposal is invalid.');
+  }
+  if (value.recommendation === 'create_task' && !taskProposal) {
+    throw new Error('create_task recommendation requires taskProposal.');
+  }
+  if (value.recommendation !== 'create_task' && taskProposal) {
+    throw new Error('taskProposal is only allowed with create_task recommendation.');
+  }
   return {
     answer: value.answer.trim(),
     observation: value.observation.trim(),
@@ -216,6 +266,7 @@ export function validateWorkspaceChatReply(
     recommendationReason,
     decisionOptions,
     focusRunIds,
+    taskProposal,
   };
 }
 
@@ -302,7 +353,13 @@ function buildPrompt(
     'done runs normally do not need attention.',
     'attention meanings: normal=no operator attention needed; watch=monitor but do not intervene yet; decision_needed=the operator should choose between meaningful alternatives; action_needed=a concrete operator/manual action is needed now.',
     'recommendation is advisory only. It never authorizes execution.',
-    'recommendation choices: keep_running, wait, inspect_runs, focus_run, manual_intervention, replan, or none.',
+    'recommendation choices: keep_running, wait, inspect_runs, focus_run, manual_intervention, replan, create_task, or none.',
+    'You are also the primary conversational entry point for new work. When the operator wants to create a new task, help turn the request into a clear task before planning begins.',
+    'If essential information is missing, ask concise follow-up questions and return recommendation=none with taskProposal=null.',
+    'When the task is sufficiently concrete to hand to the planner, return recommendation=create_task and a taskProposal.',
+    'taskProposal.title must be concise and descriptive. taskProposal.description must faithfully preserve the operator intent, relevant constraints, expected behavior, and preservation requirements without inventing unsupported requirements.',
+    'Use preferredExecutionMode=shadow by default unless the operator explicitly asks for normal execution or the conversation clearly establishes normal mode.',
+    'A taskProposal is advisory. Never claim it has been created or planned; Studio requires a fresh explicit operator click before using the existing create-and-plan workflow.',
     'Use focus_run when one or more specific runs deserve the operator\'s attention first, and include only supplied run ids in focusRunIds.',
     'decisionOptions should list up to four realistic operator choices when a meaningful choice exists; otherwise return an empty array.',
     'Do not tell the operator that Neal already resumed, retried, changed files, or performed an action unless the supplied summaries explicitly establish it.',
@@ -399,6 +456,7 @@ export async function askWorkspaceChat(args: {
     recommendationReason: reply.recommendationReason,
     decisionOptions: reply.decisionOptions,
     focusRunIds: reply.focusRunIds,
+    taskProposal: reply.taskProposal,
   });
 
   return { reply, history: await readWorkspaceChatHistory(args.cwd) };
