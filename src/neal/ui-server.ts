@@ -342,15 +342,10 @@ function studioChatFieldSource(
   sources: ReturnType<typeof getConfigSourceInfo>,
 ): UiConfigSource {
   const directKey = `studio.chat.${field}`;
-  const direct = configSourceFor(repoConfig, userConfig, sources, directKey);
-  if (direct.kind !== 'default') {
-    return direct;
-  }
-
   const chatProviderExplicit = hasExplicitStudioChatProvider(repoConfig, userConfig);
 
   if (chatProviderExplicit) {
-    return direct;
+    return configSourceFor(repoConfig, userConfig, sources, directKey);
   }
 
   const reviewer = configSourceFor(repoConfig, userConfig, sources, `agent.reviewer.${field}`);
