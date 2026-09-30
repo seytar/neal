@@ -47,6 +47,9 @@ test('Studio exposes run-scoped Ask Neal chat without bypassing existing actions
   assert.match(source, /message\.action === 'guidance_and_resume'/);
   assert.match(source, /status\.resumeDecision\?\.kind === 'needs_message'/);
   assert.match(source, /onAction\('guidance', \{ message: message\.guidanceMessage \}\)/);
+  assert.match(source, /operator-chat-observation/);
+  assert.match(source, /operator-chat-decision/);
+  assert.match(source, /What should I do next, and why\?/);
 });
 
 
