@@ -1717,12 +1717,12 @@ function OperatorChatPanel({
   onSend,
   onAction,
   onArtifactTab,
+  actionableMessageId,
 }) {
   if (!open || !detail) return null;
 
   const messages = history?.messages || [];
   const status = detail.status;
-  const latestAssistantId = [...messages].reverse().find((message) => message.role === 'assistant')?.id || null;
 
   function openSource(source) {
     if (source === 'status') return;
@@ -1810,7 +1810,7 @@ function OperatorChatPanel({
                 ) : null}
 
                 {message.role === 'assistant' &&
-                message.id === latestAssistantId &&
+                message.id === actionableMessageId &&
                 message.action === 'resume' &&
                 status.resumeDecision?.kind === 'continue' ? (
                   <div className="operator-chat-action">
@@ -1822,7 +1822,7 @@ function OperatorChatPanel({
                 ) : null}
 
                 {message.role === 'assistant' &&
-                message.id === latestAssistantId &&
+                message.id === actionableMessageId &&
                 message.action === 'guidance_and_resume' &&
                 status.resumeDecision?.kind === 'needs_message' &&
                 message.guidanceMessage ? (
@@ -1918,6 +1918,7 @@ function App() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState(null);
+  const [chatActionMessageId, setChatActionMessageId] = useState(null);
   const selectedRunRef = useRef(selectedRunId);
   selectedRunRef.current = selectedRunId;
 
@@ -1991,6 +1992,7 @@ function App() {
       const data = await api('/api/runs/' + encodeURIComponent(requestRunId) + '/chat');
       if (selectedRunRef.current === requestRunId) {
         setChatHistory(data);
+        setChatActionMessageId(null);
       }
     } catch (nextError) {
       if (selectedRunRef.current === requestRunId) {
@@ -2018,6 +2020,14 @@ function App() {
       });
       if (selectedRunRef.current === requestRunId) {
         setChatHistory(data.history);
+        const latestAssistant = [...(data.history?.messages || [])]
+          .reverse()
+          .find((item) => item.role === 'assistant');
+        setChatActionMessageId(
+          data.reply?.action && data.reply.action !== 'none'
+            ? latestAssistant?.id || null
+            : null,
+        );
         setChatDraft('');
       }
     } catch (nextError) {
@@ -2172,6 +2182,7 @@ function App() {
     setChatHistory({ path: null, messages: [] });
     setChatDraft('');
     setChatError(null);
+    setChatActionMessageId(null);
     setChatLoading(false);
     setChatSending(false);
     if (chatOpen && selectedRunId) {
@@ -2291,6 +2302,11 @@ function App() {
       setError(nextError.message);
     }
   }, [selectedRunId, refreshDetail, refreshRuns]);
+
+  const runOperatorChatAction = useCallback(async (action, body = {}) => {
+    setChatActionMessageId(null);
+    await runAction(action, body);
+  }, [runAction]);
 
   const selectIssue = useCallback((issue) => {
     setSelectedIssuePath(issue.planDoc);
@@ -2505,8 +2521,9 @@ function App() {
         draft={chatDraft}
         setDraft={setChatDraft}
         onSend={sendChat}
-        onAction={runAction}
+        onAction={runOperatorChatAction}
         onArtifactTab={selectTab}
+        actionableMessageId={chatActionMessageId}
       />
 
       <NewIssueModal
