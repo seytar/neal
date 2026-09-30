@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -204,6 +204,11 @@ function configDraftFromSnapshot(config) {
       model: config.roles.reviewer.model || '',
       effort: config.roles.reviewer.effort || '',
     },
+    chat: {
+      provider: config.chat?.inheritReviewer ? '' : (config.chat?.provider || ''),
+      model: config.chat?.inheritReviewer ? '' : (config.chat?.model || ''),
+      effort: config.chat?.inheritReviewer ? '' : (config.chat?.effort || ''),
+    },
     reviewLevel: config.runtime.review_level.value || 'moderate',
     openaiCompatible: {
       baseUrl: config.openaiCompatible.baseUrl || '',
@@ -228,6 +233,24 @@ function configChanges(config, draft) {
     }
     if (draft[role].effort !== (current.effort || '')) {
       changes['agent.' + role + '.effort'] = draft[role].effort || null;
+    }
+  }
+
+  if (!draft.chat.provider) {
+    if (!config.chat.inheritReviewer) {
+      changes['studio.chat.provider'] = null;
+      changes['studio.chat.model'] = null;
+      changes['studio.chat.effort'] = null;
+    }
+  } else {
+    if (config.chat.inheritReviewer || draft.chat.provider !== (config.chat.provider || '')) {
+      changes['studio.chat.provider'] = draft.chat.provider;
+    }
+    if (config.chat.inheritReviewer || draft.chat.model !== (config.chat.model || '')) {
+      changes['studio.chat.model'] = draft.chat.model || null;
+    }
+    if (config.chat.inheritReviewer || draft.chat.effort !== (config.chat.effort || '')) {
+      changes['studio.chat.effort'] = draft.chat.effort || null;
     }
   }
 
@@ -315,6 +338,87 @@ function RoleConfigCard({ role, config, draft, setDraft }) {
           value={draft[role].effort}
           onChange={(event) => setField('effort', event.target.value)}
           disabled={effortOptions.length === 0}
+        >
+          <option value="">provider default</option>
+          {effortOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </ConfigField>
+    </section>
+  );
+}
+
+
+function ChatConfigCard({ config, draft, setDraft }) {
+  const inherited = !draft.chat.provider;
+  const provider = inherited ? config.roles.reviewer.provider : draft.chat.provider;
+  const effortOptions = config.providerEfforts[provider] || [];
+  const providerOptions = config.roleOptions.chat || [];
+
+  function setField(field, value) {
+    setDraft((current) => ({
+      ...current,
+      chat: { ...current.chat, [field]: value },
+    }));
+  }
+
+  return (
+    <section className="config-role-card config-chat-card">
+      <div className="config-role-head">
+        <strong>Ask Neal</strong>
+        <span>{inherited ? 'inherits Reviewer · ' : ''}{modelLabel(config.chat)}</span>
+      </div>
+
+      <ConfigField
+        label="Provider"
+        source={config.chat.sources.provider}
+        hint="Inherit Reviewer keeps chat aligned with the Reviewer configuration. Pick a provider to tune chat independently."
+      >
+        <select
+          value={draft.chat.provider}
+          onChange={(event) => {
+            const nextProvider = event.target.value;
+            setDraft((current) => ({
+              ...current,
+              chat: {
+                provider: nextProvider,
+                model: nextProvider ? '' : '',
+                effort: nextProvider ? '' : '',
+              },
+            }));
+          }}
+        >
+          <option value="">inherit reviewer</option>
+          {providerOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </ConfigField>
+
+      <ConfigField
+        label="Model"
+        source={config.chat.sources.model}
+        hint={inherited ? 'Inherited from Reviewer.' : 'Blank means the selected provider default.'}
+      >
+        <input
+          className="text-input"
+          value={draft.chat.model}
+          onChange={(event) => setField('model', event.target.value)}
+          placeholder={inherited ? (config.roles.reviewer.model || 'reviewer provider default') : 'provider default'}
+          disabled={inherited}
+        />
+      </ConfigField>
+
+      <ConfigField
+        label="Effort"
+        source={config.chat.sources.effort}
+        hint={inherited
+          ? 'Inherited from Reviewer.'
+          : effortOptions.length
+            ? 'Provider-supported reasoning depth.'
+            : 'This provider has no configurable effort.'}
+      >
+        <select
+          value={draft.chat.effort}
+          onChange={(event) => setField('effort', event.target.value)}
+          disabled={inherited || effortOptions.length === 0}
         >
           <option value="">provider default</option>
           {effortOptions.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -437,6 +541,17 @@ function ConfigPanel({ open, onClose, config, loading, onReload, issuesPath, onI
                     setDraft={setDraft}
                   />
                 ))}
+              </div>
+            </section>
+
+            <section className="config-section">
+              <div className="config-section-title">Ask Neal</div>
+              <div className="config-role-grid config-chat-grid">
+                <ChatConfigCard
+                  config={config}
+                  draft={draft}
+                  setDraft={setDraft}
+                />
               </div>
             </section>
 
@@ -570,8 +685,11 @@ function ConfigPanel({ open, onClose, config, loading, onReload, issuesPath, onI
               </div>
             </div>
 
-            {target === 'user' && Object.values(config.roles).some((role) =>
-              Object.values(role.sources).some((source) => source.kind === 'repo')
+            {target === 'user' && (
+              Object.values(config.roles).some((role) =>
+                Object.values(role.sources).some((source) => source.kind === 'repo')
+              ) ||
+              Object.values(config.chat.sources).some((source) => source.kind === 'repo')
             ) ? (
               <div className="notice">
                 Some effective agent values come from repo <code>neal.yml</code>. Saving the same keys to User config will not override those repo values.
@@ -803,6 +921,8 @@ function IssueList({
   onCommands,
   onConfig,
   onNewRun,
+  onNewTask,
+  onAskNeal,
   onResizeStart,
 }) {
   return (
@@ -818,7 +938,19 @@ function IssueList({
           <button type="button" className="sidebar-command-button" onClick={onCommands}>commands</button>
         </div>
       </div>
-      <button type="button" className="new-run-button" onClick={onNewRun}>+ New Issue</button>
+      <button type="button" className="sidebar-ask-neal-button primary" onClick={onAskNeal}>
+        <img src="/neal-mark.svg" alt="" aria-hidden="true" />
+        <span>
+          <strong>Ask Neal</strong>
+          <small>workspace command center</small>
+        </span>
+      </button>
+      <div className="sidebar-primary-actions">
+        <button type="button" className="new-run-button" onClick={onNewTask}>+ New Task</button>
+        <button type="button" className="sidebar-direct-issue-button" onClick={onNewRun}>
+          Direct issue
+        </button>
+      </div>
 
       <div className="sidebar-section-head">
         <span className="sidebar-section-label">Issues</span>
@@ -1703,6 +1835,333 @@ function ArtifactPanel({
   );
 }
 
+
+function operatorAttentionLabel(value) {
+  return {
+    normal: 'Normal',
+    watch: 'Watch',
+    decision_needed: 'Decision needed',
+    action_needed: 'Action needed',
+  }[value] || 'Normal';
+}
+
+function operatorRecommendationLabel(value) {
+  return {
+    none: 'No recommendation',
+    keep_running: 'Keep running',
+    wait: 'Wait',
+    inspect_sources: 'Inspect sources',
+    inspect_runs: 'Inspect runs',
+    focus_run: 'Focus run',
+    resume: 'Resume',
+    provide_guidance: 'Provide guidance',
+    manual_intervention: 'Manual intervention',
+    replan: 'Replan',
+    create_task: 'Create task',
+  }[value] || value;
+}
+
+function OperatorChatPanel({
+  open,
+  onClose,
+  scope,
+  setScope,
+  detail,
+  history,
+  loading,
+  sending,
+  error,
+  draft,
+  setDraft,
+  onSend,
+  onAction,
+  onArtifactTab,
+  onFocusRun,
+  onTaskProposalCreate,
+  onTaskProposalEdit,
+  actionableMessageId,
+  embedded = false,
+}) {
+  if (!open || (scope === 'run' && !detail)) return null;
+
+  const messages = history?.messages || [];
+  const status = detail?.status || null;
+  const workspaceMode = scope === 'workspace';
+
+  function openSource(source) {
+    if (workspaceMode || source === 'status') return;
+    onArtifactTab(source);
+    onClose();
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    void onSend();
+  }
+
+  return (
+    <div
+      className={'commands-backdrop operator-chat-backdrop' + (embedded ? ' embedded' : '')}
+      onClick={embedded ? undefined : onClose}
+    >
+      <aside
+        className={'operator-chat-panel' + (embedded ? ' embedded' : '')}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="operator-chat-head">
+          <div>
+            <div className="operator-chat-title">
+              <img src="/neal-mark.svg" alt="" aria-hidden="true" />
+              <strong>Ask Neal</strong>
+            </div>
+            <span>{workspaceMode ? 'Workspace overview' : (detail.uiTitle || basename(status.planDoc))}</span>
+            <small>
+              {workspaceMode
+                ? 'all runs · observation + decision support'
+                : status.runId + ' · ' + status.publicStatus + ' · ' + status.publicPhase}
+            </small>
+          </div>
+          <button
+            type="button"
+            className={embedded ? 'button compact operator-chat-back' : 'panel-close'}
+            onClick={onClose}
+          >
+            {embedded ? 'Back to Studio' : '×'}
+          </button>
+        </div>
+
+        <div className="operator-chat-scope">
+          <button
+            type="button"
+            className={workspaceMode ? 'active' : ''}
+            onClick={() => setScope('workspace')}
+            disabled={sending}
+          >
+            Workspace
+          </button>
+          <button
+            type="button"
+            className={!workspaceMode ? 'active' : ''}
+            onClick={() => setScope('run')}
+            disabled={sending || !detail}
+          >
+            Run
+          </button>
+        </div>
+
+        <div className="operator-chat-shortcuts">
+          {(workspaceMode ? [
+            'Give me a workspace briefing.',
+            'What needs my attention?',
+            'Which run should I look at first?',
+            'Which runs can I ignore for now?',
+            'What decisions are waiting on me?',
+            'I want to start a new task.',
+          ] : [
+            'Give me a situation assessment.',
+            'Do I need to intervene?',
+            'What are my options?',
+            'What should I do next, and why?',
+            'Summarize what changed.',
+          ]).map((question) => (
+            <button
+              type="button"
+              key={question}
+              disabled={sending}
+              onClick={() => void onSend(question)}
+            >
+              {question}
+            </button>
+          ))}
+        </div>
+
+        <div className="operator-chat-messages">
+          {loading ? (
+            <div className="empty-inline">Loading chat…</div>
+          ) : messages.length === 0 ? (
+            <div className="operator-chat-empty">
+              {workspaceMode
+                ? 'Ask Neal to triage the workspace, identify which runs need attention, and help decide what to look at next.'
+                : 'Ask Neal to assess the run, flag whether you need to intervene, compare options, or recommend the next step.'}
+            </div>
+          ) : (
+            messages.map((message) => (
+              <article
+                className={'operator-chat-message ' + message.role}
+                key={message.id}
+              >
+                <div className="operator-chat-role">
+                  {message.role === 'user' ? 'You' : 'Neal'}
+                </div>
+                {message.role === 'assistant' ? (
+                  <div className="operator-chat-markdown">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <p>{message.text}</p>
+                )}
+
+                {message.role === 'assistant' && message.observation ? (
+                  <div className={'operator-chat-observation attention-' + (message.attention || 'normal')}>
+                    <div className="operator-chat-insight-head">
+                      <strong>Observation</strong>
+                      <span>{operatorAttentionLabel(message.attention || 'normal')}</span>
+                    </div>
+                    <p>{message.observation}</p>
+                  </div>
+                ) : null}
+
+                {message.role === 'assistant' &&
+                (message.recommendation && message.recommendation !== 'none' || message.decisionOptions?.length) ? (
+                  <div className="operator-chat-decision">
+                    <div className="operator-chat-insight-head">
+                      <strong>Decision support</strong>
+                      {message.recommendation && message.recommendation !== 'none' ? (
+                        <span>{operatorRecommendationLabel(message.recommendation)}</span>
+                      ) : null}
+                    </div>
+                    {message.recommendationReason ? <p>{message.recommendationReason}</p> : null}
+                    {message.decisionOptions?.length ? (
+                      <ul>
+                        {message.decisionOptions.map((option) => <li key={option}>{option}</li>)}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {workspaceMode && message.role === 'assistant' && message.taskProposal ? (
+                  <div className="operator-chat-task-proposal">
+                    <div className="operator-chat-insight-head">
+                      <strong>Task proposal</strong>
+                      <span>{message.taskProposal.preferredExecutionMode}</span>
+                    </div>
+                    <h4>{message.taskProposal.title}</h4>
+                    <p>{message.taskProposal.description}</p>
+                    {message.id === actionableMessageId ? (
+                      <div className="operator-chat-task-actions">
+                        <ActionButton
+                          kind="primary"
+                          onClick={() => onTaskProposalCreate(message.taskProposal)}
+                        >
+                          Create &amp; plan
+                        </ActionButton>
+                        <ActionButton onClick={() => onTaskProposalEdit(message.taskProposal)}>
+                          Edit draft
+                        </ActionButton>
+                      </div>
+                    ) : (
+                      <small>Ask Neal to regenerate this proposal before creating it.</small>
+                    )}
+                  </div>
+                ) : null}
+
+                {workspaceMode && message.role === 'assistant' && message.focusRunIds?.length ? (
+                  <div className="operator-chat-focus-runs">
+                    <span>Focus runs</span>
+                    <div>
+                      {message.focusRunIds.map((runId) => (
+                        <button
+                          type="button"
+                          key={runId}
+                          onClick={() => onFocusRun(runId)}
+                        >
+                          {runId}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {message.role === 'assistant' && message.sources?.length ? (
+                  <div className="operator-chat-sources">
+                    {message.sources.map((source) => (
+                      <button
+                        type="button"
+                        key={source}
+                        className="operator-chat-source"
+                        disabled={source === 'status'}
+                        title={source === 'status' ? 'Current run status' : 'Open source artifact'}
+                        onClick={() => openSource(source)}
+                      >
+                        {source}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {!workspaceMode && message.role === 'assistant' &&
+                message.id === actionableMessageId &&
+                message.action === 'resume' &&
+                status?.resumeDecision?.kind === 'continue' ? (
+                  <div className="operator-chat-action">
+                    <span>{message.actionReason || 'Neal can continue from the current recorded state.'}</span>
+                    <ActionButton kind="primary" onClick={() => onAction('resume')}>
+                      Resume
+                    </ActionButton>
+                  </div>
+                ) : null}
+
+                {!workspaceMode && message.role === 'assistant' &&
+                message.id === actionableMessageId &&
+                message.action === 'guidance_and_resume' &&
+                status?.resumeDecision?.kind === 'needs_message' &&
+                message.guidanceMessage ? (
+                  <div className="operator-chat-action">
+                    <span>{message.actionReason || 'This can be sent as operator guidance.'}</span>
+                    <code>{message.guidanceMessage}</code>
+                    <ActionButton
+                      kind="primary"
+                      onClick={() => onAction('guidance', { message: message.guidanceMessage })}
+                    >
+                      Send &amp; resume
+                    </ActionButton>
+                  </div>
+                ) : null}
+              </article>
+            ))
+          )}
+          {sending ? (
+            <article className="operator-chat-message assistant pending">
+              <div className="operator-chat-role">Neal</div>
+              <p>{workspaceMode ? 'Reading the workspace…' : 'Reading this run…'}</p>
+            </article>
+          ) : null}
+        </div>
+
+        {error ? <div className="operator-chat-error">{error}</div> : null}
+
+        <form className="operator-chat-composer" onSubmit={submit}>
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={workspaceMode ? 'Ask Neal about the workspace…' : 'Ask Neal about this run…'}
+            disabled={sending}
+            rows={3}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                if (draft.trim() && !sending) {
+                  void onSend();
+                }
+              }
+            }}
+          />
+          <div>
+            <span>Enter to send · Shift+Enter for newline</span>
+            <button
+              type="submit"
+              className="button primary operator-chat-send"
+              disabled={!draft.trim() || sending}
+            >
+              {sending ? 'Asking…' : 'Send'}
+            </button>
+          </div>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
 function App() {
   const [runs, setRuns] = useState([]);
   const [issues, setIssues] = useState([]);
@@ -1733,6 +2192,19 @@ function App() {
   const [newRunPlanId, setNewRunPlanId] = useState('');
   const [newRunAction, setNewRunAction] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [operatorHome, setOperatorHome] = useState(true);
+  const [chatScope, setChatScope] = useState('workspace');
+  const [chatHistory, setChatHistory] = useState({ path: null, messages: [] });
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatSending, setChatSending] = useState(false);
+  const [chatError, setChatError] = useState(null);
+  const [chatActionMessageId, setChatActionMessageId] = useState(null);
+  const selectedRunRef = useRef(selectedRunId);
+  const chatScopeRef = useRef(chatScope);
+  selectedRunRef.current = selectedRunId;
+  chatScopeRef.current = chatScope;
 
   const selectedExists = useMemo(
     () => runs.some((run) => run.runId === selectedRunId),
@@ -1763,6 +2235,28 @@ function App() {
     void refreshConfig();
   }, [refreshConfig]);
 
+  const openWorkspaceChat = useCallback(() => {
+    setChatScope('workspace');
+    setChatDraft('');
+    setChatOpen(false);
+    setOperatorHome(true);
+  }, []);
+
+  const openNewTaskChat = useCallback(() => {
+    setChatScope('workspace');
+    setChatDraft('I want to start a new task. Help me define it.');
+    setChatOpen(false);
+    setOperatorHome(true);
+  }, []);
+
+  const openRunChat = useCallback(() => {
+    if (!selectedRunId) return;
+    setChatScope('run');
+    setChatDraft('');
+    setChatOpen(false);
+    setOperatorHome(true);
+  }, [selectedRunId]);
+
   const refreshRuns = useCallback(async () => {
     try {
       const data = await api('/api/issues?path=' + encodeURIComponent(issuesPath));
@@ -1790,6 +2284,100 @@ function App() {
       setError(nextError.message);
     }
   }, [selectedRunId]);
+
+
+  const loadChat = useCallback(async () => {
+    const requestScope = chatScope;
+    const requestRunId = selectedRunId;
+    if (requestScope === 'run' && !requestRunId) {
+      setChatHistory({ path: null, messages: [] });
+      return;
+    }
+
+    setChatLoading(true);
+    setChatError(null);
+    try {
+      const endpoint = requestScope === 'workspace'
+        ? '/api/workspace/chat'
+        : '/api/runs/' + encodeURIComponent(requestRunId) + '/chat';
+      const data = await api(endpoint);
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
+        setChatHistory(data);
+        setChatActionMessageId(null);
+      }
+    } catch (nextError) {
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
+        setChatError(nextError.message);
+      }
+    } finally {
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
+        setChatLoading(false);
+      }
+    }
+  }, [chatScope, selectedRunId]);
+
+  const sendChat = useCallback(async (overrideMessage = null) => {
+    if (chatSending) return;
+    const requestScope = chatScope;
+    const requestRunId = selectedRunId;
+    if (requestScope === 'run' && !requestRunId) return;
+
+    const message = String(overrideMessage ?? chatDraft).trim();
+    if (!message) return;
+
+    setChatSending(true);
+    setChatError(null);
+    try {
+      const endpoint = requestScope === 'workspace'
+        ? '/api/workspace/chat'
+        : '/api/runs/' + encodeURIComponent(requestRunId) + '/chat';
+      const data = await api(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ message }),
+      });
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
+        setChatHistory(data.history);
+        const latestAssistant = [...(data.history?.messages || [])]
+          .reverse()
+          .find((item) => item.role === 'assistant');
+        setChatActionMessageId(
+          requestScope === 'run' && data.reply?.action && data.reply.action !== 'none'
+            ? latestAssistant?.id || null
+            : requestScope === 'workspace' && data.reply?.taskProposal
+              ? latestAssistant?.id || null
+              : null,
+        );
+        setChatDraft('');
+      }
+    } catch (nextError) {
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
+        setChatError(nextError.message);
+        void loadChat();
+      }
+    } finally {
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
+        setChatSending(false);
+      }
+    }
+  }, [chatScope, selectedRunId, chatSending, chatDraft, loadChat]);
 
   const loadArtifact = useCallback(async (tab = selectedTab) => {
     if (!selectedRunId) {
@@ -1928,6 +2516,17 @@ function App() {
   }, [selectedRunId, refreshDetail]);
 
   useEffect(() => {
+    setChatHistory({ path: null, messages: [] });
+    setChatError(null);
+    setChatActionMessageId(null);
+    setChatLoading(false);
+    setChatSending(false);
+    if ((chatOpen || operatorHome) && (chatScope === 'workspace' || selectedRunId)) {
+      void loadChat();
+    }
+  }, [selectedRunId, chatOpen, operatorHome, chatScope, loadChat]);
+
+  useEffect(() => {
     if (!selectedRunId) {
       setActivity(null);
       return undefined;
@@ -2040,11 +2639,31 @@ function App() {
     }
   }, [selectedRunId, refreshDetail, refreshRuns]);
 
+  const runOperatorChatAction = useCallback(async (action, body = {}) => {
+    setChatActionMessageId(null);
+    await runAction(action, body);
+  }, [runAction]);
+
+  const focusChatRun = useCallback((runId) => {
+    const run = runs.find((candidate) => candidate.runId === runId);
+    if (!run) return;
+    setSelectedIssuePath(run.planDoc);
+    setSelectedRunId(runId);
+    setSelectedIssueFile(null);
+    setDetail(null);
+    setChatDraft('');
+    setChatScope('run');
+    setChatOpen(false);
+    setOperatorHome(false);
+  }, [runs]);
+
   const selectIssue = useCallback((issue) => {
     setSelectedIssuePath(issue.planDoc);
     setSelectedRunId(issue.currentRun?.runId || null);
     setSelectedIssueFile(null);
     setDetail(null);
+    setChatOpen(false);
+    setOperatorHome(false);
   }, []);
 
   const startSidebarResize = useCallback((event) => {
@@ -2136,6 +2755,55 @@ function App() {
     setNewRunOpen(true);
   }, []);
 
+  const editTaskProposal = useCallback((proposal) => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const random = window.crypto.randomUUID().slice(0, 8);
+    setNewRunTitle(proposal.title || '');
+    setNewRunDescription(proposal.description || '');
+    setNewRunMode(proposal.preferredExecutionMode === 'normal' ? 'normal' : 'shadow');
+    setNewRunPlanId(stamp + '-' + random);
+    setNewRunAction(null);
+    setChatActionMessageId(null);
+    setChatOpen(false);
+    setOperatorHome(false);
+    setNewRunOpen(true);
+  }, []);
+
+  const createTaskProposal = useCallback(async (proposal) => {
+    if (!proposal?.description?.trim()) return;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const random = window.crypto.randomUUID().slice(0, 8);
+    const planId = stamp + '-' + random;
+    const mode = proposal.preferredExecutionMode === 'normal' ? 'normal' : 'shadow';
+
+    setNewRunTitle(proposal.title || '');
+    setNewRunDescription(proposal.description);
+    setNewRunMode(mode);
+    setNewRunPlanId(planId);
+    setNewRunAction(null);
+    setChatActionMessageId(null);
+    setChatOpen(false);
+    setOperatorHome(false);
+    setNewRunOpen(true);
+
+    try {
+      const data = await api('/api/new-run/plan', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: proposal.title?.trim() || null,
+          description: proposal.description.trim(),
+          planId,
+          preferredExecutionMode: mode,
+          issuesPath,
+        }),
+      });
+      setNewRunAction(data);
+      await refreshRuns();
+    } catch (nextError) {
+      setError(nextError.message);
+    }
+  }, [issuesPath, refreshRuns]);
+
   const startNewRun = useCallback(async () => {
     if (!newRunDescription.trim()) {
       return;
@@ -2177,6 +2845,8 @@ function App() {
           onCommands={() => setCommandsOpen(true)}
           onConfig={openConfig}
           onNewRun={openNewRun}
+          onNewTask={openNewTaskChat}
+          onAskNeal={openWorkspaceChat}
           onResizeStart={startSidebarResize}
         />
         <CommandsPanel
@@ -2195,6 +2865,27 @@ function App() {
           onIssuesPathChange={applyIssuesPath}
         />
 
+        <OperatorChatPanel
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          scope={chatScope}
+          setScope={setChatScope}
+          detail={detail}
+          history={chatHistory}
+          loading={chatLoading}
+          sending={chatSending}
+          error={chatError}
+          draft={chatDraft}
+          setDraft={setChatDraft}
+          onSend={sendChat}
+          onAction={runOperatorChatAction}
+          onArtifactTab={selectTab}
+          onFocusRun={focusChatRun}
+          onTaskProposalCreate={createTaskProposal}
+          onTaskProposalEdit={editTaskProposal}
+          actionableMessageId={chatActionMessageId}
+        />
+
       <NewIssueModal
         open={newRunOpen}
         onClose={() => setNewRunOpen(false)}
@@ -2209,7 +2900,35 @@ function App() {
         onStart={startNewRun}
       />
 
-      <main className="main"><div className="empty">No issues found under <code>{issuesPath}</code>, and no prior Neal run history exists.</div></main>
+      <main className={operatorHome ? 'main ask-neal-home-main' : 'main'}>
+        {operatorHome ? (
+          <OperatorChatPanel
+            open
+            embedded
+            onClose={() => setOperatorHome(false)}
+            scope={chatScope}
+            setScope={setChatScope}
+            detail={detail}
+            history={chatHistory}
+            loading={chatLoading}
+            sending={chatSending}
+            error={chatError}
+            draft={chatDraft}
+            setDraft={setChatDraft}
+            onSend={sendChat}
+            onAction={runOperatorChatAction}
+            onArtifactTab={selectTab}
+            onFocusRun={focusChatRun}
+            onTaskProposalCreate={createTaskProposal}
+            onTaskProposalEdit={editTaskProposal}
+            actionableMessageId={chatActionMessageId}
+          />
+        ) : (
+          <div className="empty empty-workspace">
+            No issues yet. Use <strong>Ask Neal</strong>, <strong>New Task</strong>, or the direct issue form.
+          </div>
+        )}
+      </main>
       </div>
     );
   }
@@ -2223,6 +2942,8 @@ function App() {
         onCommands={() => setCommandsOpen(true)}
         onConfig={openConfig}
         onNewRun={openNewRun}
+        onNewTask={openNewTaskChat}
+        onAskNeal={openWorkspaceChat}
         onResizeStart={startSidebarResize}
       />
 
@@ -2242,6 +2963,27 @@ function App() {
         onIssuesPathChange={applyIssuesPath}
       />
 
+      <OperatorChatPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        scope={chatScope}
+        setScope={setChatScope}
+        detail={detail}
+        history={chatHistory}
+        loading={chatLoading}
+        sending={chatSending}
+        error={chatError}
+        draft={chatDraft}
+        setDraft={setChatDraft}
+        onSend={sendChat}
+        onAction={runOperatorChatAction}
+        onArtifactTab={selectTab}
+        onFocusRun={focusChatRun}
+        onTaskProposalCreate={createTaskProposal}
+        onTaskProposalEdit={editTaskProposal}
+        actionableMessageId={chatActionMessageId}
+      />
+
       <NewIssueModal
         open={newRunOpen}
         onClose={() => setNewRunOpen(false)}
@@ -2256,10 +2998,32 @@ function App() {
         onStart={startNewRun}
       />
 
-      <main className="main">
+      <main className={operatorHome ? 'main ask-neal-home-main' : 'main'}>
         {error ? <div className="global-error">{error}</div> : null}
 
-        {!selectedIssue ? (
+        {operatorHome ? (
+          <OperatorChatPanel
+            open
+            embedded
+            onClose={() => setOperatorHome(false)}
+            scope={chatScope}
+            setScope={setChatScope}
+            detail={detail}
+            history={chatHistory}
+            loading={chatLoading}
+            sending={chatSending}
+            error={chatError}
+            draft={chatDraft}
+            setDraft={setChatDraft}
+            onSend={sendChat}
+            onAction={runOperatorChatAction}
+            onArtifactTab={selectTab}
+            onFocusRun={focusChatRun}
+            onTaskProposalCreate={createTaskProposal}
+            onTaskProposalEdit={editTaskProposal}
+            actionableMessageId={chatActionMessageId}
+          />
+        ) : !selectedIssue ? (
           <div className="empty">Select an issue.</div>
         ) : !selectedIssue.currentRun && selectedIssue.readyWithoutRun ? (
           <ReadyIssueDetail
@@ -2288,6 +3052,13 @@ function App() {
                 </span>
               </div>
               <div className="top-actions">
+                <button
+                  type="button"
+                  className="button compact ask-neal-button"
+                  onClick={openRunChat}
+                >
+                  Ask Neal
+                </button>
                 <button type="button" className="button compact" onClick={openConfig}>
                   Config
                 </button>

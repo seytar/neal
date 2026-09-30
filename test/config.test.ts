@@ -21,6 +21,9 @@ import {
   getConsultantMaxAttempts,
   getReviewLevel,
   getReviewStuckWindow,
+  getStudioChatEffort,
+  getStudioChatModel,
+  getStudioChatProvider,
   isWriterProvidersNotConfiguredError,
 } from '../src/neal/config.js';
 import { getDefaultAgentConfig } from '../src/neal/state.js';
@@ -1312,5 +1315,100 @@ test('explicit planner effort overrides coder inheritance', async () => {
     const config = getExplicitAgentConfig(cwd);
     assert.equal(config?.planner.effort, 'medium');
     assert.equal(getDefaultAgentConfig(cwd).planner.effort, 'medium');
+  });
+});
+
+
+test('Studio chat inherits Reviewer by default and supports an independent provider tuple', async () => {
+  await withIsolatedHome(async (home) => {
+    const cwd = await mkdtemp(join(tmpdir(), 'neal-config-studio-chat-'));
+
+    await writeUserConfig(
+      home,
+      [
+        'agent:',
+        '  reviewer:',
+        '    provider: anthropic-claude',
+        '    model: reviewer-model',
+        '    effort: high',
+        '',
+      ].join('\n'),
+    );
+    clearConfigCache(cwd);
+
+    assert.equal(getStudioChatProvider(cwd), 'anthropic-claude');
+    assert.equal(getStudioChatModel(cwd), 'reviewer-model');
+    assert.equal(getStudioChatEffort(cwd), 'high');
+
+    await writeFile(
+      join(cwd, 'neal.yml'),
+      [
+        'studio:',
+        '  chat:',
+        '    provider: openai-codex',
+        '    model: chat-model',
+        '    effort: medium',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    clearConfigCache(cwd);
+
+    assert.equal(getStudioChatProvider(cwd), 'openai-codex');
+    assert.equal(getStudioChatModel(cwd), 'chat-model');
+    assert.equal(getStudioChatEffort(cwd), 'medium');
+
+    await writeFile(
+      join(cwd, 'neal.yml'),
+      [
+        'studio:',
+        '  chat:',
+        '    provider: openai-codex',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    clearConfigCache(cwd);
+
+    assert.equal(getStudioChatProvider(cwd), 'openai-codex');
+    assert.equal(getStudioChatModel(cwd), null);
+    assert.equal(getStudioChatEffort(cwd), null);
+  });
+});
+
+test('repo Studio chat null provider disables a user chat override and restores Reviewer inheritance', async () => {
+  await withIsolatedHome(async (home) => {
+    const cwd = await mkdtemp(join(tmpdir(), 'neal-config-studio-chat-precedence-'));
+
+    await writeUserConfig(
+      home,
+      [
+        'agent:',
+        '  reviewer:',
+        '    provider: anthropic-claude',
+        '    model: reviewer-model',
+        'studio:',
+        '  chat:',
+        '    provider: openai-codex',
+        '    model: user-chat-model',
+        '',
+      ].join('\n'),
+    );
+    await writeFile(
+      join(cwd, 'neal.yml'),
+      [
+        'studio:',
+        '  chat:',
+        '    provider: null',
+        '    model: null',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    clearConfigCache(cwd);
+
+    assert.equal(getStudioChatProvider(cwd), 'anthropic-claude');
+    assert.equal(getStudioChatModel(cwd), 'reviewer-model');
+    assert.equal(getStudioChatEffort(cwd), null);
   });
 });
