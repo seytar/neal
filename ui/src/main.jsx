@@ -921,6 +921,7 @@ function IssueList({
   onCommands,
   onConfig,
   onNewRun,
+  onAskNeal,
   onResizeStart,
 }) {
   return (
@@ -936,7 +937,10 @@ function IssueList({
           <button type="button" className="sidebar-command-button" onClick={onCommands}>commands</button>
         </div>
       </div>
-      <button type="button" className="new-run-button" onClick={onNewRun}>+ New Issue</button>
+      <div className="sidebar-primary-actions">
+        <button type="button" className="new-run-button" onClick={onNewRun}>+ New Issue</button>
+        <button type="button" className="sidebar-ask-neal-button" onClick={onAskNeal}>Ask Neal</button>
+      </div>
 
       <div className="sidebar-section-head">
         <span className="sidebar-section-label">Issues</span>
@@ -2134,6 +2138,7 @@ function App() {
   const [newRunAction, setNewRunAction] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [chatOpen, setChatOpen] = useState(false);
+  const [chatScope, setChatScope] = useState('run');
   const [chatHistory, setChatHistory] = useState({ path: null, messages: [] });
   const [chatDraft, setChatDraft] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -2141,7 +2146,9 @@ function App() {
   const [chatError, setChatError] = useState(null);
   const [chatActionMessageId, setChatActionMessageId] = useState(null);
   const selectedRunRef = useRef(selectedRunId);
+  const chatScopeRef = useRef(chatScope);
   selectedRunRef.current = selectedRunId;
+  chatScopeRef.current = chatScope;
 
   const selectedExists = useMemo(
     () => runs.some((run) => run.runId === selectedRunId),
@@ -2171,6 +2178,17 @@ function App() {
     setConfigOpen(true);
     void refreshConfig();
   }, [refreshConfig]);
+
+  const openWorkspaceChat = useCallback(() => {
+    setChatScope('workspace');
+    setChatOpen(true);
+  }, []);
+
+  const openRunChat = useCallback(() => {
+    if (!selectedRunId) return;
+    setChatScope('run');
+    setChatOpen(true);
+  }, [selectedRunId]);
 
   const refreshRuns = useCallback(async () => {
     try {
@@ -2202,66 +2220,95 @@ function App() {
 
 
   const loadChat = useCallback(async () => {
-    if (!selectedRunId) {
+    const requestScope = chatScope;
+    const requestRunId = selectedRunId;
+    if (requestScope === 'run' && !requestRunId) {
       setChatHistory({ path: null, messages: [] });
       return;
     }
-    const requestRunId = selectedRunId;
+
     setChatLoading(true);
     setChatError(null);
     try {
-      const data = await api('/api/runs/' + encodeURIComponent(requestRunId) + '/chat');
-      if (selectedRunRef.current === requestRunId) {
+      const endpoint = requestScope === 'workspace'
+        ? '/api/workspace/chat'
+        : '/api/runs/' + encodeURIComponent(requestRunId) + '/chat';
+      const data = await api(endpoint);
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
         setChatHistory(data);
         setChatActionMessageId(null);
       }
     } catch (nextError) {
-      if (selectedRunRef.current === requestRunId) {
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
         setChatError(nextError.message);
       }
     } finally {
-      if (selectedRunRef.current === requestRunId) {
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
         setChatLoading(false);
       }
     }
-  }, [selectedRunId]);
+  }, [chatScope, selectedRunId]);
 
   const sendChat = useCallback(async (overrideMessage = null) => {
-    if (!selectedRunId || chatSending) return;
+    if (chatSending) return;
+    const requestScope = chatScope;
     const requestRunId = selectedRunId;
+    if (requestScope === 'run' && !requestRunId) return;
+
     const message = String(overrideMessage ?? chatDraft).trim();
     if (!message) return;
 
     setChatSending(true);
     setChatError(null);
     try {
-      const data = await api('/api/runs/' + encodeURIComponent(requestRunId) + '/chat', {
+      const endpoint = requestScope === 'workspace'
+        ? '/api/workspace/chat'
+        : '/api/runs/' + encodeURIComponent(requestRunId) + '/chat';
+      const data = await api(endpoint, {
         method: 'POST',
         body: JSON.stringify({ message }),
       });
-      if (selectedRunRef.current === requestRunId) {
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
         setChatHistory(data.history);
         const latestAssistant = [...(data.history?.messages || [])]
           .reverse()
           .find((item) => item.role === 'assistant');
         setChatActionMessageId(
-          data.reply?.action && data.reply.action !== 'none'
+          requestScope === 'run' && data.reply?.action && data.reply.action !== 'none'
             ? latestAssistant?.id || null
             : null,
         );
         setChatDraft('');
       }
     } catch (nextError) {
-      if (selectedRunRef.current === requestRunId) {
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
         setChatError(nextError.message);
         void loadChat();
       }
     } finally {
-      if (selectedRunRef.current === requestRunId) {
+      if (
+        chatScopeRef.current === requestScope &&
+        (requestScope === 'workspace' || selectedRunRef.current === requestRunId)
+      ) {
         setChatSending(false);
       }
     }
-  }, [selectedRunId, chatSending, chatDraft, loadChat]);
+  }, [chatScope, selectedRunId, chatSending, chatDraft, loadChat]);
 
   const loadArtifact = useCallback(async (tab = selectedTab) => {
     if (!selectedRunId) {
@@ -2529,6 +2576,16 @@ function App() {
     await runAction(action, body);
   }, [runAction]);
 
+  const focusChatRun = useCallback((runId) => {
+    const run = runs.find((candidate) => candidate.runId === runId);
+    if (!run) return;
+    setSelectedIssuePath(run.planDoc);
+    setSelectedRunId(runId);
+    setSelectedIssueFile(null);
+    setDetail(null);
+    setChatScope('run');
+  }, [runs]);
+
   const selectIssue = useCallback((issue) => {
     setSelectedIssuePath(issue.planDoc);
     setSelectedRunId(issue.currentRun?.runId || null);
@@ -2712,6 +2769,7 @@ function App() {
         onCommands={() => setCommandsOpen(true)}
         onConfig={openConfig}
         onNewRun={openNewRun}
+        onAskNeal={openWorkspaceChat}
         onResizeStart={startSidebarResize}
       />
 
@@ -2734,6 +2792,8 @@ function App() {
       <OperatorChatPanel
         open={chatOpen}
         onClose={() => setChatOpen(false)}
+        scope={chatScope}
+        setScope={setChatScope}
         detail={detail}
         history={chatHistory}
         loading={chatLoading}
@@ -2744,6 +2804,7 @@ function App() {
         onSend={sendChat}
         onAction={runOperatorChatAction}
         onArtifactTab={selectTab}
+        onFocusRun={focusChatRun}
         actionableMessageId={chatActionMessageId}
       />
 
@@ -2796,7 +2857,7 @@ function App() {
                 <button
                   type="button"
                   className="button compact ask-neal-button"
-                  onClick={() => setChatOpen(true)}
+                  onClick={openRunChat}
                 >
                   Ask Neal
                 </button>
