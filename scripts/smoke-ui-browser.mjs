@@ -85,7 +85,7 @@ function smokeScript(mode) {
             document.querySelector('.operator-chat-panel') ? 'true' : 'false';
           document.body.dataset.smokeAskNealShortcut =
             Array.from(document.querySelectorAll('.operator-chat-shortcuts button'))
-              .some((button) => button.textContent.trim() === 'What do you need from me?')
+              .some((button) => button.textContent.trim() === 'What should I do next, and why?')
               ? 'true'
               : 'false';
         }, 250);
