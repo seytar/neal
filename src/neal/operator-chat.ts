@@ -73,6 +73,53 @@ function nullableString(value: unknown, name: string) {
   return value.trim() || null;
 }
 
+
+function parseHistoryMessage(line: string): OperatorChatMessage | null {
+  try {
+    const value = JSON.parse(line) as Record<string, unknown>;
+    if (
+      typeof value.id !== 'string' ||
+      typeof value.ts !== 'string' ||
+      typeof value.text !== 'string' ||
+      (value.role !== 'user' && value.role !== 'assistant')
+    ) {
+      return null;
+    }
+
+    if (value.role === 'user') {
+      return {
+        id: value.id,
+        ts: value.ts,
+        role: 'user',
+        text: value.text,
+      };
+    }
+
+    const action: OperatorChatAction =
+      value.action === 'resume' || value.action === 'guidance_and_resume'
+        ? value.action
+        : 'none';
+
+    return {
+      id: value.id,
+      ts: value.ts,
+      role: 'assistant',
+      text: value.text,
+      sources: Array.isArray(value.sources)
+        ? Array.from(new Set(value.sources.filter(isSource)))
+        : [],
+      action,
+      guidanceMessage:
+        action === 'guidance_and_resume' && typeof value.guidanceMessage === 'string'
+          ? value.guidanceMessage.trim() || null
+          : null,
+      actionReason: typeof value.actionReason === 'string' ? value.actionReason.trim() || null : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function validateOperatorChatReply(payload: unknown): OperatorChatReply {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new Error('Operator chat response must be an object.');
@@ -126,16 +173,8 @@ export async function readOperatorChatHistory(status: NealStatusSnapshot) {
     const messages = content
       .split('\n')
       .filter(Boolean)
-      .flatMap((line) => {
-        try {
-          const value = JSON.parse(line) as OperatorChatMessage;
-          return value && typeof value.text === 'string' && (value.role === 'user' || value.role === 'assistant')
-            ? [value]
-            : [];
-        } catch {
-          return [];
-        }
-      });
+      .map(parseHistoryMessage)
+      .filter((message): message is OperatorChatMessage => message !== null);
     return { path, messages, truncated: start > 0 };
   } finally {
     await handle.close();
