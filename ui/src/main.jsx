@@ -921,6 +921,7 @@ function IssueList({
   onCommands,
   onConfig,
   onNewRun,
+  onNewTask,
   onAskNeal,
   onResizeStart,
 }) {
@@ -938,9 +939,12 @@ function IssueList({
         </div>
       </div>
       <div className="sidebar-primary-actions">
-        <button type="button" className="new-run-button" onClick={onNewRun}>+ New Issue</button>
+        <button type="button" className="new-run-button" onClick={onNewTask}>+ New Task</button>
         <button type="button" className="sidebar-ask-neal-button" onClick={onAskNeal}>Ask Neal</button>
       </div>
+      <button type="button" className="sidebar-direct-issue-button" onClick={onNewRun}>
+        Direct issue form
+      </button>
 
       <div className="sidebar-section-head">
         <span className="sidebar-section-label">Issues</span>
@@ -1847,6 +1851,7 @@ function operatorRecommendationLabel(value) {
     provide_guidance: 'Provide guidance',
     manual_intervention: 'Manual intervention',
     replan: 'Replan',
+    create_task: 'Create task',
   }[value] || value;
 }
 
@@ -1866,6 +1871,8 @@ function OperatorChatPanel({
   onAction,
   onArtifactTab,
   onFocusRun,
+  onTaskProposalCreate,
+  onTaskProposalEdit,
   actionableMessageId,
 }) {
   if (!open || (scope === 'run' && !detail)) return null;
@@ -1930,6 +1937,7 @@ function OperatorChatPanel({
             'Which run should I look at first?',
             'Which runs can I ignore for now?',
             'What decisions are waiting on me?',
+            'I want to start a new task.',
           ] : [
             'Give me a situation assessment.',
             'Do I need to intervene?',
@@ -1999,6 +2007,32 @@ function OperatorChatPanel({
                         {message.decisionOptions.map((option) => <li key={option}>{option}</li>)}
                       </ul>
                     ) : null}
+                  </div>
+                ) : null}
+
+                {workspaceMode && message.role === 'assistant' && message.taskProposal ? (
+                  <div className="operator-chat-task-proposal">
+                    <div className="operator-chat-insight-head">
+                      <strong>Task proposal</strong>
+                      <span>{message.taskProposal.preferredExecutionMode}</span>
+                    </div>
+                    <h4>{message.taskProposal.title}</h4>
+                    <p>{message.taskProposal.description}</p>
+                    {message.id === actionableMessageId ? (
+                      <div className="operator-chat-task-actions">
+                        <ActionButton
+                          kind="primary"
+                          onClick={() => onTaskProposalCreate(message.taskProposal)}
+                        >
+                          Create &amp; plan
+                        </ActionButton>
+                        <ActionButton onClick={() => onTaskProposalEdit(message.taskProposal)}>
+                          Edit draft
+                        </ActionButton>
+                      </div>
+                    ) : (
+                      <small>Ask Neal to regenerate this proposal before creating it.</small>
+                    )}
                   </div>
                 ) : null}
 
@@ -2186,6 +2220,12 @@ function App() {
     setChatOpen(true);
   }, []);
 
+  const openNewTaskChat = useCallback(() => {
+    setChatScope('workspace');
+    setChatDraft('I want to start a new task. Help me define it.');
+    setChatOpen(true);
+  }, []);
+
   const openRunChat = useCallback(() => {
     if (!selectedRunId) return;
     setChatScope('run');
@@ -2290,7 +2330,9 @@ function App() {
         setChatActionMessageId(
           requestScope === 'run' && data.reply?.action && data.reply.action !== 'none'
             ? latestAssistant?.id || null
-            : null,
+            : requestScope === 'workspace' && data.reply?.taskProposal
+              ? latestAssistant?.id || null
+              : null,
         );
         setChatDraft('');
       }
@@ -2684,6 +2726,53 @@ function App() {
     setNewRunOpen(true);
   }, []);
 
+  const editTaskProposal = useCallback((proposal) => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const random = window.crypto.randomUUID().slice(0, 8);
+    setNewRunTitle(proposal.title || '');
+    setNewRunDescription(proposal.description || '');
+    setNewRunMode(proposal.preferredExecutionMode === 'normal' ? 'normal' : 'shadow');
+    setNewRunPlanId(stamp + '-' + random);
+    setNewRunAction(null);
+    setChatActionMessageId(null);
+    setChatOpen(false);
+    setNewRunOpen(true);
+  }, []);
+
+  const createTaskProposal = useCallback(async (proposal) => {
+    if (!proposal?.description?.trim()) return;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const random = window.crypto.randomUUID().slice(0, 8);
+    const planId = stamp + '-' + random;
+    const mode = proposal.preferredExecutionMode === 'normal' ? 'normal' : 'shadow';
+
+    setNewRunTitle(proposal.title || '');
+    setNewRunDescription(proposal.description);
+    setNewRunMode(mode);
+    setNewRunPlanId(planId);
+    setNewRunAction(null);
+    setChatActionMessageId(null);
+    setChatOpen(false);
+    setNewRunOpen(true);
+
+    try {
+      const data = await api('/api/new-run/plan', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: proposal.title?.trim() || null,
+          description: proposal.description.trim(),
+          planId,
+          preferredExecutionMode: mode,
+          issuesPath,
+        }),
+      });
+      setNewRunAction(data);
+      await refreshRuns();
+    } catch (nextError) {
+      setError(nextError.message);
+    }
+  }, [issuesPath, refreshRuns]);
+
   const startNewRun = useCallback(async () => {
     if (!newRunDescription.trim()) {
       return;
@@ -2725,6 +2814,8 @@ function App() {
           onCommands={() => setCommandsOpen(true)}
           onConfig={openConfig}
           onNewRun={openNewRun}
+          onNewTask={openNewTaskChat}
+          onAskNeal={openWorkspaceChat}
           onResizeStart={startSidebarResize}
         />
         <CommandsPanel
@@ -2743,6 +2834,27 @@ function App() {
           onIssuesPathChange={applyIssuesPath}
         />
 
+        <OperatorChatPanel
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          scope={chatScope}
+          setScope={setChatScope}
+          detail={detail}
+          history={chatHistory}
+          loading={chatLoading}
+          sending={chatSending}
+          error={chatError}
+          draft={chatDraft}
+          setDraft={setChatDraft}
+          onSend={sendChat}
+          onAction={runOperatorChatAction}
+          onArtifactTab={selectTab}
+          onFocusRun={focusChatRun}
+          onTaskProposalCreate={createTaskProposal}
+          onTaskProposalEdit={editTaskProposal}
+          actionableMessageId={chatActionMessageId}
+        />
+
       <NewIssueModal
         open={newRunOpen}
         onClose={() => setNewRunOpen(false)}
@@ -2757,7 +2869,11 @@ function App() {
         onStart={startNewRun}
       />
 
-      <main className="main"><div className="empty">No issues found under <code>{issuesPath}</code>, and no prior Neal run history exists.</div></main>
+      <main className="main">
+        <div className="empty empty-workspace">
+          No issues yet. Start with <strong>New Task</strong> and describe what you want to Ask Neal.
+        </div>
+      </main>
       </div>
     );
   }
@@ -2771,6 +2887,7 @@ function App() {
         onCommands={() => setCommandsOpen(true)}
         onConfig={openConfig}
         onNewRun={openNewRun}
+        onNewTask={openNewTaskChat}
         onAskNeal={openWorkspaceChat}
         onResizeStart={startSidebarResize}
       />
@@ -2807,6 +2924,8 @@ function App() {
         onAction={runOperatorChatAction}
         onArtifactTab={selectTab}
         onFocusRun={focusChatRun}
+        onTaskProposalCreate={createTaskProposal}
+        onTaskProposalEdit={editTaskProposal}
         actionableMessageId={chatActionMessageId}
       />
 
