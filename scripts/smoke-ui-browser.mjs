@@ -75,17 +75,21 @@ function smokeScript(mode) {
         }, 250);
       }
 
-      const askNealButton = Array.from(document.querySelectorAll('button'))
-        .find((button) => button.textContent.trim() === 'Ask Neal');
+      const askNealButton = document.querySelector('.sidebar-ask-neal-button');
       document.body.dataset.smokeAskNealButton = askNealButton ? 'true' : 'false';
       if (askNealButton) {
         askNealButton.click();
         setTimeout(() => {
           document.body.dataset.smokeAskNealPanel =
             document.querySelector('.operator-chat-panel') ? 'true' : 'false';
+          document.body.dataset.smokeAskNealWorkspaceScope =
+            Array.from(document.querySelectorAll('.operator-chat-scope button'))
+              .some((button) => button.textContent.trim() === 'Workspace' && button.classList.contains('active'))
+              ? 'true'
+              : 'false';
           document.body.dataset.smokeAskNealShortcut =
             Array.from(document.querySelectorAll('.operator-chat-shortcuts button'))
-              .some((button) => button.textContent.trim() === 'What should I do next, and why?')
+              .some((button) => button.textContent.trim() === 'What needs my attention?')
               ? 'true'
               : 'false';
         }, 250);
@@ -308,6 +312,14 @@ const server = createServer((req, res) => {
       });
       return;
     }
+    if (url.pathname === '/api/workspace/chat') {
+      json(res, {
+        path: workspaceRoot + '/.neal/STUDIO_OPERATOR_CHAT.ndjson',
+        messages: [],
+        truncated: false,
+      });
+      return;
+    }
     if (url.pathname === '/api/runs/' + runId + '/activity') {
       json(res, {
         runId,
@@ -422,6 +434,7 @@ try {
   assert.match(first, /data-smoke-original-source="true"/);
   assert.match(first, /data-smoke-ask-neal-button="true"/);
   assert.match(first, /data-smoke-ask-neal-panel="true"/);
+  assert.match(first, /data-smoke-ask-neal-workspace-scope="true"/);
   assert.match(first, /data-smoke-ask-neal-shortcut="true"/);
   assert.match(first, /data-smoke-stored-width="440"/);
 
