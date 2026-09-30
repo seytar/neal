@@ -142,7 +142,13 @@ function CommandsPanel({ catalog, open, onClose }) {
             <strong>Neal commands</strong>
             <span>v{catalog?.version || '?'}</span>
           </div>
-          <button type="button" className="panel-close" onClick={onClose}>×</button>
+          <button
+            type="button"
+            className={embedded ? 'button compact operator-chat-back' : 'panel-close'}
+            onClick={onClose}
+          >
+            {embedded ? 'Back to Studio' : '×'}
+          </button>
         </div>
 
         <div className="command-catalog">
@@ -1874,6 +1880,7 @@ function OperatorChatPanel({
   onTaskProposalCreate,
   onTaskProposalEdit,
   actionableMessageId,
+  embedded = false,
 }) {
   if (!open || (scope === 'run' && !detail)) return null;
 
@@ -1893,8 +1900,14 @@ function OperatorChatPanel({
   }
 
   return (
-    <div className="commands-backdrop operator-chat-backdrop" onClick={onClose}>
-      <aside className="operator-chat-panel" onClick={(event) => event.stopPropagation()}>
+    <div
+      className={'commands-backdrop operator-chat-backdrop' + (embedded ? ' embedded' : '')}
+      onClick={embedded ? undefined : onClose}
+    >
+      <aside
+        className={'operator-chat-panel' + (embedded ? ' embedded' : '')}
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="operator-chat-head">
           <div>
             <div className="operator-chat-title">
@@ -2174,7 +2187,8 @@ function App() {
   const [newRunAction, setNewRunAction] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [chatOpen, setChatOpen] = useState(false);
-  const [chatScope, setChatScope] = useState('run');
+  const [operatorHome, setOperatorHome] = useState(true);
+  const [chatScope, setChatScope] = useState('workspace');
   const [chatHistory, setChatHistory] = useState({ path: null, messages: [] });
   const [chatDraft, setChatDraft] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -2218,20 +2232,23 @@ function App() {
   const openWorkspaceChat = useCallback(() => {
     setChatScope('workspace');
     setChatDraft('');
-    setChatOpen(true);
+    setChatOpen(false);
+    setOperatorHome(true);
   }, []);
 
   const openNewTaskChat = useCallback(() => {
     setChatScope('workspace');
     setChatDraft('I want to start a new task. Help me define it.');
-    setChatOpen(true);
+    setChatOpen(false);
+    setOperatorHome(true);
   }, []);
 
   const openRunChat = useCallback(() => {
     if (!selectedRunId) return;
     setChatScope('run');
     setChatDraft('');
-    setChatOpen(true);
+    setChatOpen(false);
+    setOperatorHome(true);
   }, [selectedRunId]);
 
   const refreshRuns = useCallback(async () => {
@@ -2498,10 +2515,10 @@ function App() {
     setChatActionMessageId(null);
     setChatLoading(false);
     setChatSending(false);
-    if (chatOpen && (chatScope === 'workspace' || selectedRunId)) {
+    if ((chatOpen || operatorHome) && (chatScope === 'workspace' || selectedRunId)) {
       void loadChat();
     }
-  }, [selectedRunId, chatOpen, chatScope, loadChat]);
+  }, [selectedRunId, chatOpen, operatorHome, chatScope, loadChat]);
 
   useEffect(() => {
     if (!selectedRunId) {
@@ -2630,6 +2647,8 @@ function App() {
     setDetail(null);
     setChatDraft('');
     setChatScope('run');
+    setChatOpen(false);
+    setOperatorHome(false);
   }, [runs]);
 
   const selectIssue = useCallback((issue) => {
@@ -2637,6 +2656,8 @@ function App() {
     setSelectedRunId(issue.currentRun?.runId || null);
     setSelectedIssueFile(null);
     setDetail(null);
+    setChatOpen(false);
+    setOperatorHome(false);
   }, []);
 
   const startSidebarResize = useCallback((event) => {
@@ -2738,6 +2759,7 @@ function App() {
     setNewRunAction(null);
     setChatActionMessageId(null);
     setChatOpen(false);
+    setOperatorHome(false);
     setNewRunOpen(true);
   }, []);
 
@@ -2755,6 +2777,7 @@ function App() {
     setNewRunAction(null);
     setChatActionMessageId(null);
     setChatOpen(false);
+    setOperatorHome(false);
     setNewRunOpen(true);
 
     try {
@@ -2871,10 +2894,28 @@ function App() {
         onStart={startNewRun}
       />
 
-      <main className="main">
-        <div className="empty empty-workspace">
-          No issues yet. Start with <strong>New Task</strong> and describe what you want to Ask Neal.
-        </div>
+      <main className="main ask-neal-home-main">
+        <OperatorChatPanel
+          open
+          embedded
+          onClose={() => setOperatorHome(false)}
+          scope={chatScope}
+          setScope={setChatScope}
+          detail={detail}
+          history={chatHistory}
+          loading={chatLoading}
+          sending={chatSending}
+          error={chatError}
+          draft={chatDraft}
+          setDraft={setChatDraft}
+          onSend={sendChat}
+          onAction={runOperatorChatAction}
+          onArtifactTab={selectTab}
+          onFocusRun={focusChatRun}
+          onTaskProposalCreate={createTaskProposal}
+          onTaskProposalEdit={editTaskProposal}
+          actionableMessageId={chatActionMessageId}
+        />
       </main>
       </div>
     );
@@ -2945,10 +2986,32 @@ function App() {
         onStart={startNewRun}
       />
 
-      <main className="main">
+      <main className={operatorHome ? 'main ask-neal-home-main' : 'main'}>
         {error ? <div className="global-error">{error}</div> : null}
 
-        {!selectedIssue ? (
+        {operatorHome ? (
+          <OperatorChatPanel
+            open
+            embedded
+            onClose={() => setOperatorHome(false)}
+            scope={chatScope}
+            setScope={setChatScope}
+            detail={detail}
+            history={chatHistory}
+            loading={chatLoading}
+            sending={chatSending}
+            error={chatError}
+            draft={chatDraft}
+            setDraft={setChatDraft}
+            onSend={sendChat}
+            onAction={runOperatorChatAction}
+            onArtifactTab={selectTab}
+            onFocusRun={focusChatRun}
+            onTaskProposalCreate={createTaskProposal}
+            onTaskProposalEdit={editTaskProposal}
+            actionableMessageId={chatActionMessageId}
+          />
+        ) : !selectedIssue ? (
           <div className="empty">Select an issue.</div>
         ) : !selectedIssue.currentRun && selectedIssue.readyWithoutRun ? (
           <ReadyIssueDetail
