@@ -42,10 +42,10 @@ test('Studio exposes run-scoped Ask Neal chat without bypassing existing actions
     /'\/api\/runs\/' \+ encodeURIComponent\(requestRunId\) \+ '\/chat'/,
   );
   assert.match(source, /message\.action === 'resume'/);
-  assert.match(source, /status\.resumeDecision\?\.kind === 'continue'/);
+  assert.match(source, /status\?\.resumeDecision\?\.kind === 'continue'/);
   assert.match(source, /onAction\('resume'\)/);
   assert.match(source, /message\.action === 'guidance_and_resume'/);
-  assert.match(source, /status\.resumeDecision\?\.kind === 'needs_message'/);
+  assert.match(source, /status\?\.resumeDecision\?\.kind === 'needs_message'/);
   assert.match(source, /onAction\('guidance', \{ message: message\.guidanceMessage \}\)/);
   assert.match(source, /operator-chat-observation/);
   assert.match(source, /operator-chat-decision/);
