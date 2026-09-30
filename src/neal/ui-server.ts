@@ -47,6 +47,11 @@ import { runNewRunCommand } from './commands/new-run.js';
 import { runResumeRunCommand } from './commands/resume-run.js';
 import { runShadowCommand } from './commands/shadow.js';
 import { askOperatorChat, readOperatorChatHistory } from './operator-chat.js';
+import {
+  askWorkspaceChat,
+  readWorkspaceChatHistory,
+  type WorkspaceChatRunContext,
+} from './workspace-operator-chat.js';
 import { resolveRunStatePath } from './run-registry.js';
 import { listRegisteredProviderDefinitions } from './providers/registry.js';
 import { getExecutionPlanPath, getExecutionPlanScopeCount } from './scopes.js';
@@ -605,6 +610,36 @@ async function patchUiConfig(cwd: string, target: 'repo' | 'user', changes: Reco
   }
 
   return buildUiConfigSnapshot(cwd);
+}
+
+async function buildWorkspaceChatRuns(ctx: UiServerContext): Promise<WorkspaceChatRunContext[]> {
+  const snapshot = await buildStatusListSnapshot({ cwd: ctx.cwd, includeResumeDecision: true });
+  const titleByPlan = new Map<string, Promise<string | null>>();
+  const getTitle = (planDoc: string) => {
+    const key = resolve(planDoc);
+    const cached = titleByPlan.get(key);
+    if (cached) return cached;
+    const title = readUiIssueTitle(planDoc);
+    titleByPlan.set(key, title);
+    return title;
+  };
+
+  return Promise.all(snapshot.runs.map(async (run) => ({
+    runId: run.runId,
+    title: await getTitle(run.planDoc),
+    planDoc: relative(ctx.cwd, run.planDoc) || run.planDoc,
+    lane: classifyUiRun(run),
+    status: run.publicStatus,
+    phase: run.publicPhase,
+    nextAction: run.nextAction,
+    updatedAt: run.updatedAt,
+    waitingForOperatorGuidance: run.waitingForOperatorGuidance,
+    pendingOperatorGuidance: run.pendingOperatorGuidance,
+    resumeDecision: run.resumeDecision ?? null,
+    manualGate: run.manualGate,
+    providerError: run.providerError,
+    action: ctx.actions.get(run.runId) ?? null,
+  })));
 }
 
 async function buildUiTerminalFooterLine(status: NealStatusSnapshot) {
@@ -1354,6 +1389,23 @@ async function handleApi(
     action.planDoc = planDoc;
     ctx.actions.set('__new_run__', action);
     json(res, 202, { ...action, displayPath });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/workspace/chat') {
+    json(res, 200, await readWorkspaceChatHistory(ctx.cwd));
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/workspace/chat') {
+    requireWriteToken(req, ctx.token);
+    const body = await readJsonBody(req);
+    const message = requireString(body, 'message');
+    json(res, 200, await askWorkspaceChat({
+      cwd: ctx.cwd,
+      runs: await buildWorkspaceChatRuns(ctx),
+      message,
+    }));
     return;
   }
 
