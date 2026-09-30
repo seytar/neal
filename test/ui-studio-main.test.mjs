@@ -32,3 +32,19 @@ test('Studio exposes the Neal brand mark and favicon asset', async () => {
   const index = await readFile(new URL('../ui/index.html', import.meta.url), 'utf8');
   assert.match(index, /rel="icon" href="\/neal-mark\.svg"/);
 });
+
+
+test('Studio exposes run-scoped Ask Neal chat without bypassing existing actions', () => {
+  assert.match(source, /function OperatorChatPanel\(/);
+  assert.match(source, />\s*Ask Neal\s*</);
+  assert.match(
+    source,
+    /'\/api\/runs\/' \+ encodeURIComponent\(selectedRunId\) \+ '\/chat'/,
+  );
+  assert.match(source, /message\.action === 'resume'/);
+  assert.match(source, /status\.resumeDecision\?\.kind === 'continue'/);
+  assert.match(source, /onAction\('resume'\)/);
+  assert.match(source, /message\.action === 'guidance_and_resume'/);
+  assert.match(source, /status\.resumeDecision\?\.kind === 'needs_message'/);
+  assert.match(source, /onAction\('guidance', \{ message: message\.guidanceMessage \}\)/);
+});
