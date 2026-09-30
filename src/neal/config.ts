@@ -796,20 +796,20 @@ export function getStudioChatProvider(cwd = process.cwd()) {
 
 export function getStudioChatModel(cwd = process.cwd()) {
   const config = loadConfigFile(cwd);
-  if (hasOwnConfigKey(config.studio?.chat, 'model')) {
-    return config.studio.chat.model === null
-      ? null
-      : (parseStringValue(config.studio.chat.model) ?? null);
+  const provider = parseConfigProviderValue(config.studio?.chat?.provider, 'studio.chat.provider');
+  if (!provider) {
+    return getDefaultReviewerModel(cwd);
   }
-  return getDefaultReviewerModel(cwd);
+  return parseStringValue(config.studio?.chat?.model) ?? null;
 }
 
 export function getStudioChatEffort(cwd = process.cwd()): string | null {
   const config = loadConfigFile(cwd);
-  if (hasOwnConfigKey(config.studio?.chat, 'effort')) {
-    return parseStringValue(config.studio.chat.effort) ?? null;
+  const provider = parseConfigProviderValue(config.studio?.chat?.provider, 'studio.chat.provider');
+  if (!provider) {
+    return getDefaultReviewerEffort(cwd);
   }
-  return getDefaultReviewerEffort(cwd);
+  return parseStringValue(config.studio?.chat?.effort) ?? null;
 }
 
 export function getDefaultCoderEffort(cwd = process.cwd()): string | null {
