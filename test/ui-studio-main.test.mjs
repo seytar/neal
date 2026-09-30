@@ -98,3 +98,29 @@ test('Workspace Ask Neal remains available before any issue or run exists', () =
   assert.match(source, /onNewTask=\{openNewTaskChat\}/);
   assert.match(source, /No issues yet\. Start with/);
 });
+
+
+test('Studio uses Ask Neal as the visual home without replacing classic run controls', () => {
+  assert.match(source, /const \[operatorHome, setOperatorHome\] = useState\(true\)/);
+  assert.match(source, /className=\{operatorHome \? 'main ask-neal-home-main' : 'main'\}/);
+  assert.match(source, /embedded/);
+  assert.match(source, /Back to Studio/);
+  assert.match(source, /setOperatorHome\(false\)/);
+  assert.match(source, /const selectIssue = useCallback/);
+  assert.match(source, /<ReadyIssueDetail/);
+  assert.match(source, /<UnprocessedIssueDetail/);
+  assert.match(source, /<ActionPanel/);
+  assert.match(source, />Run Shadow</);
+  assert.match(source, />\s*Run Normal\s*</);
+  assert.match(source, /Plan issue/);
+  assert.match(source, /'\/api\/issues\/plan'/);
+  assert.match(source, /'\/api\/issues\/execute'/);
+  assert.match(source, /'\/api\/runs\/' \+ encodeURIComponent\(selectedRunId\) \+ '\/actions\/' \+ action/);
+});
+
+test('Ask Neal is visually primary while direct issue creation remains available', () => {
+  assert.match(source, /className="sidebar-ask-neal-button primary"/);
+  assert.match(source, /workspace command center/);
+  assert.match(source, />\+ New Task</);
+  assert.match(source, />\s*Direct issue\s*</);
+});
