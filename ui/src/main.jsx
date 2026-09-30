@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1918,6 +1918,8 @@ function App() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatSending, setChatSending] = useState(false);
   const [chatError, setChatError] = useState(null);
+  const selectedRunRef = useRef(selectedRunId);
+  selectedRunRef.current = selectedRunId;
 
   const selectedExists = useMemo(
     () => runs.some((run) => run.runId === selectedRunId),
@@ -1982,37 +1984,51 @@ function App() {
       setChatHistory({ path: null, messages: [] });
       return;
     }
+    const requestRunId = selectedRunId;
     setChatLoading(true);
     setChatError(null);
     try {
-      const data = await api('/api/runs/' + encodeURIComponent(selectedRunId) + '/chat');
-      setChatHistory(data);
+      const data = await api('/api/runs/' + encodeURIComponent(requestRunId) + '/chat');
+      if (selectedRunRef.current === requestRunId) {
+        setChatHistory(data);
+      }
     } catch (nextError) {
-      setChatError(nextError.message);
+      if (selectedRunRef.current === requestRunId) {
+        setChatError(nextError.message);
+      }
     } finally {
-      setChatLoading(false);
+      if (selectedRunRef.current === requestRunId) {
+        setChatLoading(false);
+      }
     }
   }, [selectedRunId]);
 
   const sendChat = useCallback(async (overrideMessage = null) => {
     if (!selectedRunId || chatSending) return;
+    const requestRunId = selectedRunId;
     const message = String(overrideMessage ?? chatDraft).trim();
     if (!message) return;
 
     setChatSending(true);
     setChatError(null);
     try {
-      const data = await api('/api/runs/' + encodeURIComponent(selectedRunId) + '/chat', {
+      const data = await api('/api/runs/' + encodeURIComponent(requestRunId) + '/chat', {
         method: 'POST',
         body: JSON.stringify({ message }),
       });
-      setChatHistory(data.history);
-      setChatDraft('');
+      if (selectedRunRef.current === requestRunId) {
+        setChatHistory(data.history);
+        setChatDraft('');
+      }
     } catch (nextError) {
-      setChatError(nextError.message);
-      void loadChat();
+      if (selectedRunRef.current === requestRunId) {
+        setChatError(nextError.message);
+        void loadChat();
+      }
     } finally {
-      setChatSending(false);
+      if (selectedRunRef.current === requestRunId) {
+        setChatSending(false);
+      }
     }
   }, [selectedRunId, chatSending, chatDraft, loadChat]);
 
@@ -2156,6 +2172,8 @@ function App() {
     setChatHistory({ path: null, messages: [] });
     setChatDraft('');
     setChatError(null);
+    setChatLoading(false);
+    setChatSending(false);
     if (chatOpen && selectedRunId) {
       void loadChat();
     }
