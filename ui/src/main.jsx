@@ -142,13 +142,7 @@ function CommandsPanel({ catalog, open, onClose }) {
             <strong>Neal commands</strong>
             <span>v{catalog?.version || '?'}</span>
           </div>
-          <button
-            type="button"
-            className={embedded ? 'button compact operator-chat-back' : 'panel-close'}
-            onClick={onClose}
-          >
-            {embedded ? 'Back to Studio' : '×'}
-          </button>
+          <button type="button" className="panel-close" onClick={onClose}>×</button>
         </div>
 
         <div className="command-catalog">
@@ -1927,7 +1921,13 @@ function OperatorChatPanel({
                 : status.runId + ' · ' + status.publicStatus + ' · ' + status.publicPhase}
             </small>
           </div>
-          <button type="button" className="panel-close" onClick={onClose}>×</button>
+          <button
+            type="button"
+            className={embedded ? 'button compact operator-chat-back' : 'panel-close'}
+            onClick={onClose}
+          >
+            {embedded ? 'Back to Studio' : '×'}
+          </button>
         </div>
 
         <div className="operator-chat-scope">
