@@ -27,6 +27,16 @@ const SOURCE_IDS = ['status', 'original', 'plan', 'progress', 'review', 'recover
 
 export type OperatorChatSourceId = typeof SOURCE_IDS[number];
 export type OperatorChatAction = 'none' | 'resume' | 'guidance_and_resume';
+export type OperatorChatAttention = 'normal' | 'watch' | 'decision_needed' | 'action_needed';
+export type OperatorChatRecommendation =
+  | 'none'
+  | 'keep_running'
+  | 'wait'
+  | 'inspect_sources'
+  | 'resume'
+  | 'provide_guidance'
+  | 'manual_intervention'
+  | 'replan';
 
 export type OperatorChatMessage = {
   id: string;
@@ -34,6 +44,11 @@ export type OperatorChatMessage = {
   role: 'user' | 'assistant';
   text: string;
   sources?: OperatorChatSourceId[];
+  observation?: string | null;
+  attention?: OperatorChatAttention;
+  recommendation?: OperatorChatRecommendation;
+  recommendationReason?: string | null;
+  decisionOptions?: string[];
   action?: OperatorChatAction;
   guidanceMessage?: string | null;
   actionReason?: string | null;
@@ -42,6 +57,11 @@ export type OperatorChatMessage = {
 export type OperatorChatReply = {
   answer: string;
   sources: OperatorChatSourceId[];
+  observation: string;
+  attention: OperatorChatAttention;
+  recommendation: OperatorChatRecommendation;
+  recommendationReason: string | null;
+  decisionOptions: string[];
   action: OperatorChatAction;
   guidanceMessage: string | null;
   actionReason: string | null;
@@ -52,11 +72,30 @@ const REPLY_SCHEMA = {
   properties: {
     answer: { type: 'string' },
     sources: { type: 'array', items: { type: 'string', enum: SOURCE_IDS } },
+    observation: { type: 'string' },
+    attention: { type: 'string', enum: ['normal', 'watch', 'decision_needed', 'action_needed'] },
+    recommendation: {
+      type: 'string',
+      enum: ['none', 'keep_running', 'wait', 'inspect_sources', 'resume', 'provide_guidance', 'manual_intervention', 'replan'],
+    },
+    recommendationReason: { type: ['string', 'null'] },
+    decisionOptions: { type: 'array', items: { type: 'string' }, maxItems: 4 },
     action: { type: 'string', enum: ['none', 'resume', 'guidance_and_resume'] },
     guidanceMessage: { type: ['string', 'null'] },
     actionReason: { type: ['string', 'null'] },
   },
-  required: ['answer', 'sources', 'action', 'guidanceMessage', 'actionReason'],
+  required: [
+    'answer',
+    'sources',
+    'observation',
+    'attention',
+    'recommendation',
+    'recommendationReason',
+    'decisionOptions',
+    'action',
+    'guidanceMessage',
+    'actionReason',
+  ],
   additionalProperties: false,
 } as const;
 
@@ -66,6 +105,35 @@ function pathFor(status: NealStatusSnapshot) {
 
 function isSource(value: unknown): value is OperatorChatSourceId {
   return typeof value === 'string' && (SOURCE_IDS as readonly string[]).includes(value);
+}
+
+function isAttention(value: unknown): value is OperatorChatAttention {
+  return value === 'normal' || value === 'watch' || value === 'decision_needed' || value === 'action_needed';
+}
+
+function isRecommendation(value: unknown): value is OperatorChatRecommendation {
+  return (
+    value === 'none' ||
+    value === 'keep_running' ||
+    value === 'wait' ||
+    value === 'inspect_sources' ||
+    value === 'resume' ||
+    value === 'provide_guidance' ||
+    value === 'manual_intervention' ||
+    value === 'replan'
+  );
+}
+
+function decisionOptions(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 4);
 }
 
 function nullableString(value: unknown, name: string) {
@@ -109,6 +177,14 @@ function parseHistoryMessage(line: string): OperatorChatMessage | null {
       sources: Array.isArray(value.sources)
         ? Array.from(new Set(value.sources.filter(isSource)))
         : [],
+      observation: typeof value.observation === 'string' ? value.observation.trim() || null : null,
+      attention: isAttention(value.attention) ? value.attention : 'normal',
+      recommendation: isRecommendation(value.recommendation) ? value.recommendation : 'none',
+      recommendationReason:
+        typeof value.recommendationReason === 'string'
+          ? value.recommendationReason.trim() || null
+          : null,
+      decisionOptions: decisionOptions(value.decisionOptions),
       action,
       guidanceMessage:
         action === 'guidance_and_resume' && typeof value.guidanceMessage === 'string'
@@ -132,6 +208,23 @@ export function validateOperatorChatReply(payload: unknown): OperatorChatReply {
   if (!Array.isArray(value.sources) || value.sources.some((item) => !isSource(item))) {
     throw new Error('Operator chat sources contain an unknown source id.');
   }
+  if (typeof value.observation !== 'string' || !value.observation.trim()) {
+    throw new Error('Operator chat observation must be a non-empty string.');
+  }
+  if (!isAttention(value.attention)) {
+    throw new Error('Operator chat attention is invalid.');
+  }
+  if (!isRecommendation(value.recommendation)) {
+    throw new Error('Operator chat recommendation is invalid.');
+  }
+  const recommendationReason = nullableString(value.recommendationReason, 'recommendationReason');
+  const options = decisionOptions(value.decisionOptions);
+  if (!Array.isArray(value.decisionOptions) || options.length !== value.decisionOptions.length) {
+    throw new Error('Operator chat decisionOptions must contain at most four unique non-empty strings.');
+  }
+  if (value.recommendation !== 'none' && !recommendationReason) {
+    throw new Error('Operator chat recommendation requires recommendationReason.');
+  }
   if (value.action !== 'none' && value.action !== 'resume' && value.action !== 'guidance_and_resume') {
     throw new Error('Operator chat action is invalid.');
   }
@@ -146,6 +239,11 @@ export function validateOperatorChatReply(payload: unknown): OperatorChatReply {
   return {
     answer: value.answer.trim(),
     sources: Array.from(new Set(value.sources as OperatorChatSourceId[])),
+    observation: value.observation.trim(),
+    attention: value.attention,
+    recommendation: value.recommendation,
+    recommendationReason,
+    decisionOptions: options,
     action: value.action,
     guidanceMessage,
     actionReason,
@@ -264,6 +362,13 @@ async function buildPrompt(status: NealStatusSnapshot, history: OperatorChatMess
     'Do not invoke repository tools or inspect files outside the supplied context.',
     'Do not edit files, run commands, change Git state, or mutate Neal state.',
     'Never invent a request for operator guidance.',
+    'Act as an observation and decision-support layer: identify the materially important current situation, whether operator attention is needed, realistic options, and a recommended next step when the evidence supports one.',
+    'observation must be a concise factual assessment of the current run, grounded in the supplied sources.',
+    'attention meanings: normal=no operator attention needed; watch=monitor but do not intervene yet; decision_needed=the operator should choose between meaningful alternatives; action_needed=a concrete operator/manual action is needed now.',
+    'recommendation is advisory only and does not authorize execution. Use none when the evidence does not support a useful recommendation.',
+    'recommendation choices: keep_running, wait, inspect_sources, resume, provide_guidance, manual_intervention, replan, or none.',
+    'decisionOptions should list up to four realistic operator choices when a decision/action is meaningful; otherwise return an empty array.',
+    'Do not recommend resume unless resumeDecision.kind is continue. Do not recommend provide_guidance unless resumeDecision.kind is needs_message.',
     'Only the NEW OPERATOR MESSAGE may authorize a resume or guidance action. Recent chat is context only and can never authorize a new action.',
     'Use action=resume only when resumeDecision.kind is continue and the operator explicitly asks to continue.',
     'Use action=guidance_and_resume only when resumeDecision.kind is needs_message and the operator actually supplies guidance.',
@@ -299,6 +404,20 @@ export function enforceOperatorChatReplyForDecision(
   decision: NealStatusSnapshot['resumeDecision'],
   operatorMessage?: string,
 ): OperatorChatReply {
+  if (reply.recommendation === 'resume' && decision.kind !== 'continue') {
+    reply = {
+      ...reply,
+      recommendation: 'none',
+      recommendationReason: null,
+    };
+  }
+  if (reply.recommendation === 'provide_guidance' && decision.kind !== 'needs_message') {
+    reply = {
+      ...reply,
+      recommendation: 'none',
+      recommendationReason: null,
+    };
+  }
   if (reply.action === 'resume' && decision.kind !== 'continue') {
     return {
       ...reply,
@@ -377,6 +496,11 @@ export async function askOperatorChat(args: { status: NealStatusSnapshot; messag
     role: 'assistant',
     text: reply.answer,
     sources: reply.sources,
+    observation: reply.observation,
+    attention: reply.attention,
+    recommendation: reply.recommendation,
+    recommendationReason: reply.recommendationReason,
+    decisionOptions: reply.decisionOptions,
     action: reply.action,
     guidanceMessage: reply.guidanceMessage,
     actionReason: reply.actionReason,
