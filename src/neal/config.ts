@@ -45,6 +45,13 @@ export type NealConfigFile = {
       effort?: string | null;
     };
   };
+  studio?: {
+    chat?: {
+      provider?: string | null;
+      model?: string | null;
+      effort?: string | null;
+    };
+  };
   providers?: {
     openai_compatible?: {
       base_url?: string | null;
@@ -358,6 +365,12 @@ function mergeConfig(base: NealConfigFile, override: NealConfigFile | null): Nea
       reviewer: {
         ...base.agent?.reviewer,
         ...override.agent?.reviewer,
+      },
+    },
+    studio: {
+      chat: {
+        ...base.studio?.chat,
+        ...override.studio?.chat,
       },
     },
     providers: {
@@ -771,6 +784,32 @@ export function getDefaultReviewerModel(cwd = process.cwd()) {
   return config.agent?.reviewer?.model === null
     ? null
     : (parseStringValue(config.agent?.reviewer?.model) ?? DEFAULT_CONFIG.agent.reviewer.model);
+}
+
+export function getStudioChatProvider(cwd = process.cwd()) {
+  const config = loadConfigFile(cwd);
+  return (
+    parseConfigProviderValue(config.studio?.chat?.provider, 'studio.chat.provider') ??
+    getDefaultReviewerProvider(cwd)
+  );
+}
+
+export function getStudioChatModel(cwd = process.cwd()) {
+  const config = loadConfigFile(cwd);
+  if (hasOwnConfigKey(config.studio?.chat, 'model')) {
+    return config.studio.chat.model === null
+      ? null
+      : (parseStringValue(config.studio.chat.model) ?? null);
+  }
+  return getDefaultReviewerModel(cwd);
+}
+
+export function getStudioChatEffort(cwd = process.cwd()): string | null {
+  const config = loadConfigFile(cwd);
+  if (hasOwnConfigKey(config.studio?.chat, 'effort')) {
+    return parseStringValue(config.studio.chat.effort) ?? null;
+  }
+  return getDefaultReviewerEffort(cwd);
 }
 
 export function getDefaultCoderEffort(cwd = process.cwd()): string | null {
