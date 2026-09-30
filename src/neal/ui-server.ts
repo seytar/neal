@@ -320,6 +320,21 @@ function roleFieldSource(
   return direct;
 }
 
+function hasExplicitStudioChatProvider(
+  repoConfig: NealConfigFile,
+  userConfig: NealConfigFile,
+) {
+  if (hasOwnNested(repoConfig, ['studio', 'chat', 'provider'])) {
+    return typeof repoConfig.studio?.chat?.provider === 'string' &&
+      repoConfig.studio.chat.provider.trim() !== '';
+  }
+  if (hasOwnNested(userConfig, ['studio', 'chat', 'provider'])) {
+    return typeof userConfig.studio?.chat?.provider === 'string' &&
+      userConfig.studio.chat.provider.trim() !== '';
+  }
+  return false;
+}
+
 function studioChatFieldSource(
   field: 'provider' | 'model' | 'effort',
   repoConfig: NealConfigFile,
@@ -332,9 +347,7 @@ function studioChatFieldSource(
     return direct;
   }
 
-  const chatProviderExplicit =
-    hasOwnNested(repoConfig, ['studio', 'chat', 'provider']) ||
-    hasOwnNested(userConfig, ['studio', 'chat', 'provider']);
+  const chatProviderExplicit = hasExplicitStudioChatProvider(repoConfig, userConfig);
 
   if (chatProviderExplicit) {
     return direct;
