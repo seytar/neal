@@ -1722,6 +1722,7 @@ function OperatorChatPanel({
 
   const messages = history?.messages || [];
   const status = detail.status;
+  const latestAssistantId = [...messages].reverse().find((message) => message.role === 'assistant')?.id || null;
 
   function openSource(source) {
     if (source === 'status') return;
@@ -1808,7 +1809,10 @@ function OperatorChatPanel({
                   </div>
                 ) : null}
 
-                {message.role === 'assistant' && message.action === 'resume' ? (
+                {message.role === 'assistant' &&
+                message.id === latestAssistantId &&
+                message.action === 'resume' &&
+                status.resumeDecision?.kind === 'continue' ? (
                   <div className="operator-chat-action">
                     <span>{message.actionReason || 'Neal can continue from the current recorded state.'}</span>
                     <ActionButton kind="primary" onClick={() => onAction('resume')}>
@@ -1817,7 +1821,11 @@ function OperatorChatPanel({
                   </div>
                 ) : null}
 
-                {message.role === 'assistant' && message.action === 'guidance_and_resume' && message.guidanceMessage ? (
+                {message.role === 'assistant' &&
+                message.id === latestAssistantId &&
+                message.action === 'guidance_and_resume' &&
+                status.resumeDecision?.kind === 'needs_message' &&
+                message.guidanceMessage ? (
                   <div className="operator-chat-action">
                     <span>{message.actionReason || 'This can be sent as operator guidance.'}</span>
                     <code>{message.guidanceMessage}</code>
