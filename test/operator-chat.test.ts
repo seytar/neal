@@ -15,6 +15,11 @@ import type { NealStatusSnapshot } from '../src/neal/status.js';
 const baseReply: OperatorChatReply = {
   answer: 'The run is waiting for operator guidance.',
   sources: ['status'],
+  observation: 'The run is paused and waiting for operator guidance.',
+  attention: 'action_needed',
+  recommendation: 'provide_guidance',
+  recommendationReason: 'The recorded resume decision requires an operator message.',
+  decisionOptions: ['Provide guidance', 'Inspect recovery context first'],
   action: 'none',
   guidanceMessage: null,
   actionReason: null,
@@ -48,11 +53,39 @@ test('operator chat validates sources and guidance payloads', () => {
     }),
     /requires guidanceMessage/,
   );
+
+
+  assert.throws(
+    () => validateOperatorChatReply({
+      ...baseReply,
+      observation: '',
+    }),
+    /observation must be a non-empty string/,
+  );
+
+  assert.throws(
+    () => validateOperatorChatReply({
+      ...baseReply,
+      recommendation: 'resume',
+      recommendationReason: null,
+    }),
+    /recommendation requires recommendationReason/,
+  );
+
+  assert.throws(
+    () => validateOperatorChatReply({
+      ...baseReply,
+      decisionOptions: ['Same option', 'Same option'],
+    }),
+    /decisionOptions/,
+  );
 });
 
 test('operator chat suppresses actions that conflict with the current resume decision', () => {
   const resumeReply: OperatorChatReply = {
     ...baseReply,
+    recommendation: 'resume',
+    recommendationReason: 'The run can continue from recorded state.',
     action: 'resume',
     actionReason: 'Continue now.',
   };
@@ -61,10 +94,14 @@ test('operator chat suppresses actions that conflict with the current resume dec
     { kind: 'needs_message' } as NealStatusSnapshot['resumeDecision'],
   );
   assert.equal(suppressedResume.action, 'none');
+  assert.equal(suppressedResume.recommendation, 'none');
+  assert.equal(suppressedResume.recommendationReason, null);
   assert.match(suppressedResume.actionReason ?? '', /Suppressed unsafe resume suggestion/);
 
   const guidanceReply: OperatorChatReply = {
     ...baseReply,
+    recommendation: 'provide_guidance',
+    recommendationReason: 'Operator guidance is required before continuing.',
     action: 'guidance_and_resume',
     guidanceMessage: 'Keep the existing schema.',
   };
@@ -138,6 +175,11 @@ test('operator chat history is run-scoped and ignores malformed lines', async ()
       role: 'assistant',
       text: 'Tampered history entry.',
       sources: ['status'],
+      observation: null,
+      attention: 'normal',
+      recommendation: 'none',
+      recommendationReason: null,
+      decisionOptions: [],
       action: 'none',
       guidanceMessage: null,
       actionReason: null,
