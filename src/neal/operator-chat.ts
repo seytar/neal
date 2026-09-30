@@ -9,6 +9,7 @@ import {
   getDefaultReviewerProvider,
   getInactivityTimeoutMs,
 } from './config.js';
+import { buildRunChangesSnapshot } from './changes.js';
 import {
   assertProviderSupportsStructuredAdvisor,
   getStructuredAdvisorAdapter,
@@ -22,7 +23,7 @@ const MAX_ARTIFACT_CHARS = 16000;
 const MAX_HISTORY_BYTES = 128 * 1024;
 const MAX_HISTORY_MESSAGES = 12;
 const MAX_MESSAGE_CHARS = 8000;
-const SOURCE_IDS = ['status', 'original', 'plan', 'progress', 'review', 'recovery', 'narrative'] as const;
+const SOURCE_IDS = ['status', 'original', 'plan', 'progress', 'review', 'recovery', 'narrative', 'changes'] as const;
 
 export type OperatorChatSourceId = typeof SOURCE_IDS[number];
 export type OperatorChatAction = 'none' | 'resume' | 'guidance_and_resume';
@@ -213,6 +214,15 @@ async function buildPrompt(status: NealStatusSnapshot, history: OperatorChatMess
     if (content !== null) renderedArtifacts.push('SOURCE ' + id + '\n' + content);
   }
 
+  const changes = await buildRunChangesSnapshot({ cwd: status.cwd, runId: status.runId });
+  const renderedChanges = JSON.stringify(changes, null, 2);
+  renderedArtifacts.push(
+    'SOURCE changes\n' +
+    (renderedChanges.length > MAX_ARTIFACT_CHARS
+      ? renderedChanges.slice(0, MAX_ARTIFACT_CHARS) + '\n[truncated by operator chat]'
+      : renderedChanges),
+  );
+
   const statusContext = {
     runId: status.runId,
     phase: status.phase,
@@ -252,7 +262,7 @@ async function buildPrompt(status: NealStatusSnapshot, history: OperatorChatMess
     'Use action=guidance_and_resume only when resumeDecision.kind is needs_message and the operator actually supplies guidance.',
     'Otherwise use action=none.',
     'guidanceMessage must faithfully restate the operator instruction and must never invent a decision.',
-    'sources must contain only materially supporting source ids. Use status for status/resume/blocker/manual-gate facts.',
+    'sources must contain only materially supporting source ids. Use status for status/resume/blocker/manual-gate facts and changes for Git/worktree change facts.',
     '',
     'CURRENT STATUS',
     JSON.stringify(statusContext, null, 2),
