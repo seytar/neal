@@ -1703,6 +1703,177 @@ function ArtifactPanel({
   );
 }
 
+
+function OperatorChatPanel({
+  open,
+  onClose,
+  detail,
+  history,
+  loading,
+  sending,
+  error,
+  draft,
+  setDraft,
+  onSend,
+  onAction,
+  onArtifactTab,
+}) {
+  if (!open || !detail) return null;
+
+  const messages = history?.messages || [];
+  const status = detail.status;
+
+  function openSource(source) {
+    if (source === 'status') return;
+    onArtifactTab(source);
+    onClose();
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    void onSend();
+  }
+
+  return (
+    <div className="commands-backdrop operator-chat-backdrop" onClick={onClose}>
+      <aside className="operator-chat-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="operator-chat-head">
+          <div>
+            <div className="operator-chat-title">
+              <img src="/neal-mark.svg" alt="" aria-hidden="true" />
+              <strong>Ask Neal</strong>
+            </div>
+            <span>{detail.uiTitle || basename(status.planDoc)}</span>
+            <small>{status.runId} · {status.publicStatus} · {status.publicPhase}</small>
+          </div>
+          <button type="button" className="panel-close" onClick={onClose}>×</button>
+        </div>
+
+        <div className="operator-chat-shortcuts">
+          {[
+            'What is happening right now?',
+            'What do you need from me?',
+            'Explain the current blocker.',
+            'Summarize what changed.',
+          ].map((question) => (
+            <button
+              type="button"
+              key={question}
+              disabled={sending}
+              onClick={() => void onSend(question)}
+            >
+              {question}
+            </button>
+          ))}
+        </div>
+
+        <div className="operator-chat-messages">
+          {loading ? (
+            <div className="empty-inline">Loading chat…</div>
+          ) : messages.length === 0 ? (
+            <div className="operator-chat-empty">
+              Ask about this run, why it stopped, what changed, or what Neal needs from you.
+            </div>
+          ) : (
+            messages.map((message) => (
+              <article
+                className={'operator-chat-message ' + message.role}
+                key={message.id}
+              >
+                <div className="operator-chat-role">
+                  {message.role === 'user' ? 'You' : 'Neal'}
+                </div>
+                {message.role === 'assistant' ? (
+                  <div className="operator-chat-markdown">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <p>{message.text}</p>
+                )}
+
+                {message.role === 'assistant' && message.sources?.length ? (
+                  <div className="operator-chat-sources">
+                    {message.sources.map((source) => (
+                      <button
+                        type="button"
+                        key={source}
+                        className="operator-chat-source"
+                        disabled={source === 'status'}
+                        title={source === 'status' ? 'Current run status' : 'Open source artifact'}
+                        onClick={() => openSource(source)}
+                      >
+                        {source}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                {message.role === 'assistant' && message.action === 'resume' ? (
+                  <div className="operator-chat-action">
+                    <span>{message.actionReason || 'Neal can continue from the current recorded state.'}</span>
+                    <ActionButton kind="primary" onClick={() => onAction('resume')}>
+                      Resume
+                    </ActionButton>
+                  </div>
+                ) : null}
+
+                {message.role === 'assistant' && message.action === 'guidance_and_resume' && message.guidanceMessage ? (
+                  <div className="operator-chat-action">
+                    <span>{message.actionReason || 'This can be sent as operator guidance.'}</span>
+                    <code>{message.guidanceMessage}</code>
+                    <ActionButton
+                      kind="primary"
+                      onClick={() => onAction('guidance', { message: message.guidanceMessage })}
+                    >
+                      Send &amp; resume
+                    </ActionButton>
+                  </div>
+                ) : null}
+              </article>
+            ))
+          )}
+          {sending ? (
+            <article className="operator-chat-message assistant pending">
+              <div className="operator-chat-role">Neal</div>
+              <p>Reading this run…</p>
+            </article>
+          ) : null}
+        </div>
+
+        {error ? <div className="operator-chat-error">{error}</div> : null}
+
+        <form className="operator-chat-composer" onSubmit={submit}>
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="Ask Neal about this run…"
+            disabled={sending}
+            rows={3}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                if (draft.trim() && !sending) {
+                  void onSend();
+                }
+              }
+            }}
+          />
+          <div>
+            <span>Enter to send · Shift+Enter for newline</span>
+            <button
+              type="submit"
+              className="button primary operator-chat-send"
+              disabled={!draft.trim() || sending}
+            >
+              {sending ? 'Asking…' : 'Send'}
+            </button>
+          </div>
+        </form>
+      </aside>
+    </div>
+  );
+}
+
 function App() {
   const [runs, setRuns] = useState([]);
   const [issues, setIssues] = useState([]);
@@ -1733,6 +1904,12 @@ function App() {
   const [newRunPlanId, setNewRunPlanId] = useState('');
   const [newRunAction, setNewRunAction] = useState(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatHistory, setChatHistory] = useState({ path: null, messages: [] });
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatSending, setChatSending] = useState(false);
+  const [chatError, setChatError] = useState(null);
 
   const selectedExists = useMemo(
     () => runs.some((run) => run.runId === selectedRunId),
@@ -1790,6 +1967,46 @@ function App() {
       setError(nextError.message);
     }
   }, [selectedRunId]);
+
+
+  const loadChat = useCallback(async () => {
+    if (!selectedRunId) {
+      setChatHistory({ path: null, messages: [] });
+      return;
+    }
+    setChatLoading(true);
+    setChatError(null);
+    try {
+      const data = await api('/api/runs/' + encodeURIComponent(selectedRunId) + '/chat');
+      setChatHistory(data);
+    } catch (nextError) {
+      setChatError(nextError.message);
+    } finally {
+      setChatLoading(false);
+    }
+  }, [selectedRunId]);
+
+  const sendChat = useCallback(async (overrideMessage = null) => {
+    if (!selectedRunId || chatSending) return;
+    const message = String(overrideMessage ?? chatDraft).trim();
+    if (!message) return;
+
+    setChatSending(true);
+    setChatError(null);
+    try {
+      const data = await api('/api/runs/' + encodeURIComponent(selectedRunId) + '/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message }),
+      });
+      setChatHistory(data.history);
+      setChatDraft('');
+    } catch (nextError) {
+      setChatError(nextError.message);
+      void loadChat();
+    } finally {
+      setChatSending(false);
+    }
+  }, [selectedRunId, chatSending, chatDraft, loadChat]);
 
   const loadArtifact = useCallback(async (tab = selectedTab) => {
     if (!selectedRunId) {
@@ -1926,6 +2143,15 @@ function App() {
     const timer = setInterval(() => void refreshDetail(), POLL_MS);
     return () => clearInterval(timer);
   }, [selectedRunId, refreshDetail]);
+
+  useEffect(() => {
+    setChatHistory({ path: null, messages: [] });
+    setChatDraft('');
+    setChatError(null);
+    if (chatOpen && selectedRunId) {
+      void loadChat();
+    }
+  }, [selectedRunId, chatOpen, loadChat]);
 
   useEffect(() => {
     if (!selectedRunId) {
@@ -2242,6 +2468,21 @@ function App() {
         onIssuesPathChange={applyIssuesPath}
       />
 
+      <OperatorChatPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        detail={detail}
+        history={chatHistory}
+        loading={chatLoading}
+        sending={chatSending}
+        error={chatError}
+        draft={chatDraft}
+        setDraft={setChatDraft}
+        onSend={sendChat}
+        onAction={runAction}
+        onArtifactTab={selectTab}
+      />
+
       <NewIssueModal
         open={newRunOpen}
         onClose={() => setNewRunOpen(false)}
@@ -2288,6 +2529,13 @@ function App() {
                 </span>
               </div>
               <div className="top-actions">
+                <button
+                  type="button"
+                  className="button compact ask-neal-button"
+                  onClick={() => setChatOpen(true)}
+                >
+                  Ask Neal
+                </button>
                 <button type="button" className="button compact" onClick={openConfig}>
                   Config
                 </button>
