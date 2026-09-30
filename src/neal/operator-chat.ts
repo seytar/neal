@@ -238,21 +238,24 @@ const PROTOCOL: StructuredJsonProtocolSpec<OperatorChatReply> = {
   allowProseBeforeBlock: false,
 };
 
-function enforceResumeDecision(reply: OperatorChatReply, status: NealStatusSnapshot): OperatorChatReply {
-  if (reply.action === 'resume' && status.resumeDecision.kind !== 'continue') {
+export function enforceOperatorChatReplyForDecision(
+  reply: OperatorChatReply,
+  decision: NealStatusSnapshot['resumeDecision'],
+): OperatorChatReply {
+  if (reply.action === 'resume' && decision.kind !== 'continue') {
     return {
       ...reply,
       action: 'none',
       guidanceMessage: null,
-      actionReason: 'Suppressed unsafe resume suggestion for resumeDecision=' + status.resumeDecision.kind + '.',
+      actionReason: 'Suppressed unsafe resume suggestion for resumeDecision=' + decision.kind + '.',
     };
   }
-  if (reply.action === 'guidance_and_resume' && status.resumeDecision.kind !== 'needs_message') {
+  if (reply.action === 'guidance_and_resume' && decision.kind !== 'needs_message') {
     return {
       ...reply,
       action: 'none',
       guidanceMessage: null,
-      actionReason: 'Suppressed unsafe guidance suggestion for resumeDecision=' + status.resumeDecision.kind + '.',
+      actionReason: 'Suppressed unsafe guidance suggestion for resumeDecision=' + decision.kind + '.',
     };
   }
   return reply;
@@ -304,7 +307,7 @@ export async function askOperatorChat(args: { status: NealStatusSnapshot; messag
     }),
   });
 
-  const reply = enforceResumeDecision(result.structured, args.status);
+  const reply = enforceOperatorChatReplyForDecision(result.structured, args.status.resumeDecision);
   await appendMessage(args.status, {
     id: randomUUID(),
     ts: new Date().toISOString(),
