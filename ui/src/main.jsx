@@ -944,13 +944,19 @@ function IssueList({
           <button type="button" className="sidebar-command-button" onClick={onCommands}>commands</button>
         </div>
       </div>
+      <button type="button" className="sidebar-ask-neal-button primary" onClick={onAskNeal}>
+        <img src="/neal-mark.svg" alt="" aria-hidden="true" />
+        <span>
+          <strong>Ask Neal</strong>
+          <small>workspace command center</small>
+        </span>
+      </button>
       <div className="sidebar-primary-actions">
         <button type="button" className="new-run-button" onClick={onNewTask}>+ New Task</button>
-        <button type="button" className="sidebar-ask-neal-button" onClick={onAskNeal}>Ask Neal</button>
+        <button type="button" className="sidebar-direct-issue-button" onClick={onNewRun}>
+          Direct issue
+        </button>
       </div>
-      <button type="button" className="sidebar-direct-issue-button" onClick={onNewRun}>
-        Direct issue form
-      </button>
 
       <div className="sidebar-section-head">
         <span className="sidebar-section-label">Issues</span>
@@ -2894,28 +2900,34 @@ function App() {
         onStart={startNewRun}
       />
 
-      <main className="main ask-neal-home-main">
-        <OperatorChatPanel
-          open
-          embedded
-          onClose={() => setOperatorHome(false)}
-          scope={chatScope}
-          setScope={setChatScope}
-          detail={detail}
-          history={chatHistory}
-          loading={chatLoading}
-          sending={chatSending}
-          error={chatError}
-          draft={chatDraft}
-          setDraft={setChatDraft}
-          onSend={sendChat}
-          onAction={runOperatorChatAction}
-          onArtifactTab={selectTab}
-          onFocusRun={focusChatRun}
-          onTaskProposalCreate={createTaskProposal}
-          onTaskProposalEdit={editTaskProposal}
-          actionableMessageId={chatActionMessageId}
-        />
+      <main className={operatorHome ? 'main ask-neal-home-main' : 'main'}>
+        {operatorHome ? (
+          <OperatorChatPanel
+            open
+            embedded
+            onClose={() => setOperatorHome(false)}
+            scope={chatScope}
+            setScope={setChatScope}
+            detail={detail}
+            history={chatHistory}
+            loading={chatLoading}
+            sending={chatSending}
+            error={chatError}
+            draft={chatDraft}
+            setDraft={setChatDraft}
+            onSend={sendChat}
+            onAction={runOperatorChatAction}
+            onArtifactTab={selectTab}
+            onFocusRun={focusChatRun}
+            onTaskProposalCreate={createTaskProposal}
+            onTaskProposalEdit={editTaskProposal}
+            actionableMessageId={chatActionMessageId}
+          />
+        ) : (
+          <div className="empty empty-workspace">
+            No issues yet. Use <strong>Ask Neal</strong>, <strong>New Task</strong>, or the direct issue form.
+          </div>
+        )}
       </main>
       </div>
     );
