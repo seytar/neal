@@ -1847,6 +1847,8 @@ function operatorRecommendationLabel(value) {
 function OperatorChatPanel({
   open,
   onClose,
+  scope,
+  setScope,
   detail,
   history,
   loading,
@@ -1857,15 +1859,17 @@ function OperatorChatPanel({
   onSend,
   onAction,
   onArtifactTab,
+  onFocusRun,
   actionableMessageId,
 }) {
-  if (!open || !detail) return null;
+  if (!open || (scope === 'run' && !detail)) return null;
 
   const messages = history?.messages || [];
-  const status = detail.status;
+  const status = detail?.status || null;
+  const workspaceMode = scope === 'workspace';
 
   function openSource(source) {
-    if (source === 'status') return;
+    if (workspaceMode || source === 'status') return;
     onArtifactTab(source);
     onClose();
   }
@@ -1884,20 +1888,49 @@ function OperatorChatPanel({
               <img src="/neal-mark.svg" alt="" aria-hidden="true" />
               <strong>Ask Neal</strong>
             </div>
-            <span>{detail.uiTitle || basename(status.planDoc)}</span>
-            <small>{status.runId} · {status.publicStatus} · {status.publicPhase}</small>
+            <span>{workspaceMode ? 'Workspace overview' : (detail.uiTitle || basename(status.planDoc))}</span>
+            <small>
+              {workspaceMode
+                ? 'all runs · observation + decision support'
+                : status.runId + ' · ' + status.publicStatus + ' · ' + status.publicPhase}
+            </small>
           </div>
           <button type="button" className="panel-close" onClick={onClose}>×</button>
         </div>
 
+        <div className="operator-chat-scope">
+          <button
+            type="button"
+            className={workspaceMode ? 'active' : ''}
+            onClick={() => setScope('workspace')}
+            disabled={sending}
+          >
+            Workspace
+          </button>
+          <button
+            type="button"
+            className={!workspaceMode ? 'active' : ''}
+            onClick={() => setScope('run')}
+            disabled={sending || !detail}
+          >
+            Run
+          </button>
+        </div>
+
         <div className="operator-chat-shortcuts">
-          {[
+          {(workspaceMode ? [
+            'Give me a workspace briefing.',
+            'What needs my attention?',
+            'Which run should I look at first?',
+            'Which runs can I ignore for now?',
+            'What decisions are waiting on me?',
+          ] : [
             'Give me a situation assessment.',
             'Do I need to intervene?',
             'What are my options?',
             'What should I do next, and why?',
             'Summarize what changed.',
-          ].map((question) => (
+          ]).map((question) => (
             <button
               type="button"
               key={question}
@@ -1914,7 +1947,9 @@ function OperatorChatPanel({
             <div className="empty-inline">Loading chat…</div>
           ) : messages.length === 0 ? (
             <div className="operator-chat-empty">
-              Ask Neal to assess the run, flag whether you need to intervene, compare options, or recommend the next step.
+              {workspaceMode
+                ? 'Ask Neal to triage the workspace, identify which runs need attention, and help decide what to look at next.'
+                : 'Ask Neal to assess the run, flag whether you need to intervene, compare options, or recommend the next step.'}
             </div>
           ) : (
             messages.map((message) => (
@@ -1961,6 +1996,23 @@ function OperatorChatPanel({
                   </div>
                 ) : null}
 
+                {workspaceMode && message.role === 'assistant' && message.focusRunIds?.length ? (
+                  <div className="operator-chat-focus-runs">
+                    <span>Focus runs</span>
+                    <div>
+                      {message.focusRunIds.map((runId) => (
+                        <button
+                          type="button"
+                          key={runId}
+                          onClick={() => onFocusRun(runId)}
+                        >
+                          {runId}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 {message.role === 'assistant' && message.sources?.length ? (
                   <div className="operator-chat-sources">
                     {message.sources.map((source) => (
@@ -1978,10 +2030,10 @@ function OperatorChatPanel({
                   </div>
                 ) : null}
 
-                {message.role === 'assistant' &&
+                {!workspaceMode && message.role === 'assistant' &&
                 message.id === actionableMessageId &&
                 message.action === 'resume' &&
-                status.resumeDecision?.kind === 'continue' ? (
+                status?.resumeDecision?.kind === 'continue' ? (
                   <div className="operator-chat-action">
                     <span>{message.actionReason || 'Neal can continue from the current recorded state.'}</span>
                     <ActionButton kind="primary" onClick={() => onAction('resume')}>
@@ -1990,10 +2042,10 @@ function OperatorChatPanel({
                   </div>
                 ) : null}
 
-                {message.role === 'assistant' &&
+                {!workspaceMode && message.role === 'assistant' &&
                 message.id === actionableMessageId &&
                 message.action === 'guidance_and_resume' &&
-                status.resumeDecision?.kind === 'needs_message' &&
+                status?.resumeDecision?.kind === 'needs_message' &&
                 message.guidanceMessage ? (
                   <div className="operator-chat-action">
                     <span>{message.actionReason || 'This can be sent as operator guidance.'}</span>
@@ -2012,7 +2064,7 @@ function OperatorChatPanel({
           {sending ? (
             <article className="operator-chat-message assistant pending">
               <div className="operator-chat-role">Neal</div>
-              <p>Reading this run…</p>
+              <p>{workspaceMode ? 'Reading the workspace…' : 'Reading this run…'}</p>
             </article>
           ) : null}
         </div>
@@ -2023,7 +2075,7 @@ function OperatorChatPanel({
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Ask Neal about this run…"
+            placeholder={workspaceMode ? 'Ask Neal about the workspace…' : 'Ask Neal about this run…'}
             disabled={sending}
             rows={3}
             onKeyDown={(event) => {
