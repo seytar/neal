@@ -2217,6 +2217,7 @@ function App() {
 
   const openWorkspaceChat = useCallback(() => {
     setChatScope('workspace');
+    setChatDraft('');
     setChatOpen(true);
   }, []);
 
@@ -2229,6 +2230,7 @@ function App() {
   const openRunChat = useCallback(() => {
     if (!selectedRunId) return;
     setChatScope('run');
+    setChatDraft('');
     setChatOpen(true);
   }, [selectedRunId]);
 
@@ -2492,15 +2494,14 @@ function App() {
 
   useEffect(() => {
     setChatHistory({ path: null, messages: [] });
-    setChatDraft('');
     setChatError(null);
     setChatActionMessageId(null);
     setChatLoading(false);
     setChatSending(false);
-    if (chatOpen && selectedRunId) {
+    if (chatOpen && (chatScope === 'workspace' || selectedRunId)) {
       void loadChat();
     }
-  }, [selectedRunId, chatOpen, loadChat]);
+  }, [selectedRunId, chatOpen, chatScope, loadChat]);
 
   useEffect(() => {
     if (!selectedRunId) {
@@ -2627,6 +2628,7 @@ function App() {
     setSelectedRunId(runId);
     setSelectedIssueFile(null);
     setDetail(null);
+    setChatDraft('');
     setChatScope('run');
   }, [runs]);
 
