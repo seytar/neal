@@ -1822,6 +1822,28 @@ function ArtifactPanel({
 }
 
 
+function operatorAttentionLabel(value) {
+  return {
+    normal: 'Normal',
+    watch: 'Watch',
+    decision_needed: 'Decision needed',
+    action_needed: 'Action needed',
+  }[value] || 'Normal';
+}
+
+function operatorRecommendationLabel(value) {
+  return {
+    none: 'No recommendation',
+    keep_running: 'Keep running',
+    wait: 'Wait',
+    inspect_sources: 'Inspect sources',
+    resume: 'Resume',
+    provide_guidance: 'Provide guidance',
+    manual_intervention: 'Manual intervention',
+    replan: 'Replan',
+  }[value] || value;
+}
+
 function OperatorChatPanel({
   open,
   onClose,
@@ -1870,9 +1892,10 @@ function OperatorChatPanel({
 
         <div className="operator-chat-shortcuts">
           {[
-            'What is happening right now?',
-            'What do you need from me?',
-            'Explain the current blocker.',
+            'Give me a situation assessment.',
+            'Do I need to intervene?',
+            'What are my options?',
+            'What should I do next, and why?',
             'Summarize what changed.',
           ].map((question) => (
             <button
@@ -1891,7 +1914,7 @@ function OperatorChatPanel({
             <div className="empty-inline">Loading chat…</div>
           ) : messages.length === 0 ? (
             <div className="operator-chat-empty">
-              Ask about this run, why it stopped, what changed, or what Neal needs from you.
+              Ask Neal to assess the run, flag whether you need to intervene, compare options, or recommend the next step.
             </div>
           ) : (
             messages.map((message) => (
@@ -1909,6 +1932,34 @@ function OperatorChatPanel({
                 ) : (
                   <p>{message.text}</p>
                 )}
+
+                {message.role === 'assistant' && message.observation ? (
+                  <div className={'operator-chat-observation attention-' + (message.attention || 'normal')}>
+                    <div className="operator-chat-insight-head">
+                      <strong>Observation</strong>
+                      <span>{operatorAttentionLabel(message.attention || 'normal')}</span>
+                    </div>
+                    <p>{message.observation}</p>
+                  </div>
+                ) : null}
+
+                {message.role === 'assistant' &&
+                (message.recommendation && message.recommendation !== 'none' || message.decisionOptions?.length) ? (
+                  <div className="operator-chat-decision">
+                    <div className="operator-chat-insight-head">
+                      <strong>Decision support</strong>
+                      {message.recommendation && message.recommendation !== 'none' ? (
+                        <span>{operatorRecommendationLabel(message.recommendation)}</span>
+                      ) : null}
+                    </div>
+                    {message.recommendationReason ? <p>{message.recommendationReason}</p> : null}
+                    {message.decisionOptions?.length ? (
+                      <ul>
+                        {message.decisionOptions.map((option) => <li key={option}>{option}</li>)}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {message.role === 'assistant' && message.sources?.length ? (
                   <div className="operator-chat-sources">
