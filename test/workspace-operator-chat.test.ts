@@ -18,6 +18,7 @@ const baseReply: WorkspaceChatReply = {
   recommendationReason: 'run-2 has an operator-facing next action.',
   decisionOptions: ['Open run-2', 'Inspect the workspace summary first'],
   focusRunIds: ['run-2'],
+  taskProposal: null,
 };
 
 test('workspace chat validates decision support and known focus runs', () => {
@@ -78,6 +79,7 @@ test('workspace chat history is workspace-scoped and sanitizes legacy or tampere
           recommendationReason: 'It needs operator input.',
           decisionOptions: ['Open run-2'],
           focusRunIds: ['run-2'],
+          taskProposal: null,
         }),
         JSON.stringify({
           id: 'a2',
@@ -88,6 +90,7 @@ test('workspace chat history is workspace-scoped and sanitizes legacy or tampere
           recommendation: 'delete_everything',
           decisionOptions: ['A', 'A', '', 7],
           focusRunIds: ['run-9', 'run-9'],
+          taskProposal: { title: '', description: '', preferredExecutionMode: 'bad' },
         }),
         '',
       ].join('\n'),
@@ -108,8 +111,49 @@ test('workspace chat history is workspace-scoped and sanitizes legacy or tampere
       recommendationReason: null,
       decisionOptions: ['A'],
       focusRunIds: ['run-9'],
+      taskProposal: null,
     });
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
+});
+
+
+test('workspace chat validates new task proposals separately from execution', () => {
+  const proposal = {
+    ...baseReply,
+    attention: 'decision_needed' as const,
+    recommendation: 'create_task' as const,
+    recommendationReason: 'The task is concrete enough to hand to the planner.',
+    decisionOptions: ['Create and plan', 'Edit the draft first'],
+    focusRunIds: [],
+    taskProposal: {
+      title: 'Add map clustering',
+      description: 'Add client-side clustering while preserving the existing map workflow.',
+      preferredExecutionMode: 'shadow' as const,
+    },
+  };
+
+  assert.deepEqual(validateWorkspaceChatReply(proposal), proposal);
+
+  assert.throws(
+    () => validateWorkspaceChatReply({ ...proposal, taskProposal: null }),
+    /create_task recommendation requires taskProposal/,
+  );
+
+  assert.throws(
+    () => validateWorkspaceChatReply({
+      ...baseReply,
+      taskProposal: proposal.taskProposal,
+    }),
+    /taskProposal is only allowed with create_task recommendation/,
+  );
+
+  assert.throws(
+    () => validateWorkspaceChatReply({
+      ...proposal,
+      taskProposal: { ...proposal.taskProposal, preferredExecutionMode: 'unsafe' },
+    }),
+    /taskProposal is invalid/,
+  );
 });
