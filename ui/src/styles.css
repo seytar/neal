@@ -1412,6 +1412,35 @@ pre {
 }
 
 
+.sidebar-primary-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.sidebar-primary-actions .new-run-button {
+  margin-bottom: 0;
+}
+
+.sidebar-ask-neal-button {
+  padding: 6px 9px;
+  color: #e4b184;
+  font-size: 10px;
+  font-weight: 750;
+  white-space: nowrap;
+  background: rgba(217, 133, 70, .08);
+  border: 1px solid #6d472d;
+  border-radius: 6px;
+}
+
+.sidebar-ask-neal-button:hover {
+  color: #f0c39c;
+  border-color: var(--studio-brand);
+  background: var(--studio-brand-wash);
+}
+
+
 .new-run-button {
   width: 100%;
   margin-bottom: 7px;
@@ -2356,6 +2385,36 @@ pre { font-size: 11px; }
   font: 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+.operator-chat-scope {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  padding: 7px 10px 0;
+  background: #0e151d;
+}
+
+.operator-chat-scope button {
+  padding: 4px 9px;
+  color: #778a9d;
+  font-size: 8px;
+  font-weight: 750;
+  background: #0b1219;
+  border: 1px solid #263442;
+  border-radius: 999px;
+}
+
+.operator-chat-scope button.active {
+  color: #f0c39c;
+  background: rgba(217, 133, 70, .08);
+  border-color: #6d472d;
+}
+
+.operator-chat-scope button:disabled {
+  cursor: default;
+  opacity: .4;
+}
+
+
 .operator-chat-shortcuts {
   display: flex;
   flex: 0 0 auto;
@@ -2523,6 +2582,42 @@ pre { font-size: 11px; }
   font-size: 9px;
   line-height: 1.5;
 }
+
+.operator-chat-focus-runs {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid #24313e;
+}
+
+.operator-chat-focus-runs > span {
+  color: #748799;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.operator-chat-focus-runs > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.operator-chat-focus-runs button {
+  padding: 4px 7px;
+  color: #d3ad89;
+  font: 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: rgba(217, 133, 70, .06);
+  border: 1px solid #5a3d29;
+  border-radius: 999px;
+}
+
+.operator-chat-focus-runs button:hover {
+  border-color: var(--studio-brand);
+}
+
 
 .operator-chat-sources {
   display: flex;
