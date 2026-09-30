@@ -71,7 +71,7 @@ test('Studio config exposes independent Ask Neal provider/model/effort controls'
 
 
 test('Studio exposes workspace Ask Neal from the sidebar', () => {
-  assert.match(source, /className="sidebar-ask-neal-button"/);
+  assert.match(source, /className="sidebar-ask-neal-button primary"/);
   assert.match(source, /onAskNeal=\{openWorkspaceChat\}/);
   assert.match(source, /onFocusRun=\{focusChatRun\}/);
 });
@@ -80,7 +80,7 @@ test('Studio exposes workspace Ask Neal from the sidebar', () => {
 test('Studio centers new task creation on Ask Neal while preserving the direct form fallback', () => {
   assert.match(source, />\+ New Task</);
   assert.match(source, /onClick=\{onNewTask\}/);
-  assert.match(source, /Direct issue form/);
+  assert.match(source, />\s*Direct issue\s*</);
   assert.match(source, /const openNewTaskChat = useCallback/);
   assert.match(source, /I want to start a new task\. Help me define it\./);
   assert.match(source, /operator-chat-task-proposal/);
@@ -96,7 +96,7 @@ test('Workspace Ask Neal remains available before any issue or run exists', () =
   assert.match(source, /chatScope === 'workspace' \|\| selectedRunId/);
   assert.match(source, /onAskNeal=\{openWorkspaceChat\}/);
   assert.match(source, /onNewTask=\{openNewTaskChat\}/);
-  assert.match(source, /No issues yet\. Start with/);
+  assert.match(source, /No issues yet\. Use/);
 });
 
 
@@ -110,8 +110,8 @@ test('Studio uses Ask Neal as the visual home without replacing classic run cont
   assert.match(source, /<ReadyIssueDetail/);
   assert.match(source, /<UnprocessedIssueDetail/);
   assert.match(source, /<ActionPanel/);
-  assert.match(source, />Run Shadow</);
-  assert.match(source, />\s*Run Normal\s*</);
+  assert.match(source, /onClick=\{\(\) => onExecute\('shadow'\)\}/);
+  assert.match(source, /onClick=\{\(\) => onExecute\('normal'\)\}/);
   assert.match(source, /Plan issue/);
   assert.match(source, /'\/api\/issues\/plan'/);
   assert.match(source, /'\/api\/issues\/execute'/);
