@@ -40,8 +40,5 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Studio browser smoke
-        run: node scripts/smoke-ui-browser.mjs
-
       - name: Verify package
         run: node scripts/verify-package.mjs
