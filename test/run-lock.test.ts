@@ -171,39 +171,54 @@ void main().catch((error) => {
 `;
 }
 
-function waitForChildClose(
+type ObservedChildClose = {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+};
+
+function observeChildClose(
   child: ReturnType<typeof spawn>,
+  stdoutChunks: Buffer[],
+  stderrChunks: Buffer[],
+) {
+  return new Promise<ObservedChildClose>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => {
+      resolve({
+        code,
+        signal,
+        stdout: Buffer.concat(stdoutChunks).toString('utf8'),
+        stderr: Buffer.concat(stderrChunks).toString('utf8'),
+      });
+    });
+  });
+}
+
+async function waitForObservedChildClose(
+  child: ReturnType<typeof spawn>,
+  childClose: Promise<ObservedChildClose>,
   stdoutChunks: Buffer[],
   stderrChunks: Buffer[],
   timeoutMs: number,
 ) {
-  let timedOut = false;
-  return new Promise<{
-    code: number | null;
-    signal: NodeJS.Signals | null;
-    stdout: string;
-    stderr: string;
-  }>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGKILL');
-    }, timeoutMs);
-
-    child.once('error', (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.once('close', (code, signal) => {
-      clearTimeout(timer);
-      const stdout = Buffer.concat(stdoutChunks).toString('utf8');
-      const stderr = Buffer.concat(stderrChunks).toString('utf8');
-      if (timedOut) {
-        reject(new Error(`child did not exit within ${timeoutMs}ms\nstdout:\n${stdout}\nstderr:\n${stderr}`));
-        return;
-      }
-      resolve({ code, signal, stdout, stderr });
-    });
-  });
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      childClose,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          const stdout = Buffer.concat(stdoutChunks).toString('utf8');
+          const stderr = Buffer.concat(stderrChunks).toString('utf8');
+          child.kill('SIGKILL');
+          reject(new Error(`child did not exit within ${timeoutMs}ms\nstdout:\n${stdout}\nstderr:\n${stderr}`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 test('inspectActiveRunLock reports no lock without creating one', async () => {
@@ -570,10 +585,10 @@ test('writer process SIGTERM cleans up the active lock and leaves status readabl
   });
   child.stdout?.on('data', (chunk: Buffer) => stdoutChunks.push(chunk));
   child.stderr?.on('data', (chunk: Buffer) => stderrChunks.push(chunk));
-  const childClose = waitForChildClose(child, stdoutChunks, stderrChunks, 5000);
+  const childClose = observeChildClose(child, stdoutChunks, stderrChunks);
   let closed = false;
   let lockPid: number | null = null;
-  childClose.then(
+  void childClose.then(
     () => {
       closed = true;
     },
@@ -583,7 +598,20 @@ test('writer process SIGTERM cleans up the active lock and leaves status readabl
   );
 
   try {
-    await waitForFile(readyPath, 5000);
+    // Startup/transpilation speed is not what this test exercises. Observe the
+    // child from spawn time, but do not arm the shutdown timeout until after
+    // SIGTERM is actually sent.
+    const startup = await Promise.race([
+      waitForFile(readyPath, 15_000).then(() => ({ kind: 'ready' as const })),
+      childClose.then((result) => ({ kind: 'closed' as const, result })),
+    ]);
+    if (startup.kind === 'closed') {
+      throw new Error(
+        `signal-cleanup child exited before coder readiness` +
+        `\ncode: ${startup.result.code}\nsignal: ${startup.result.signal ?? 'none'}` +
+        `\nstdout:\n${startup.result.stdout}\nstderr:\n${startup.result.stderr}`,
+      );
+    }
 
     const lockPath = getActiveRunLockPath(cwd);
     const lock = JSON.parse(await readFile(lockPath, 'utf8')) as ActiveRunLock;
@@ -594,7 +622,7 @@ test('writer process SIGTERM cleans up the active lock and leaves status readabl
 
     process.kill(lock.pid, 'SIGTERM');
     await waitForProcessExit(lock.pid, 5000);
-    await childClose.catch(() => null);
+    await waitForObservedChildClose(child, childClose, stdoutChunks, stderrChunks, 5000);
     await waitForMissingFile(lockPath, 1000);
 
     const statusInvocation = nealCliInvocation(join(repoRoot, 'src/neal/index.ts'), ['status', '--json', '--run', lock.runId]);
