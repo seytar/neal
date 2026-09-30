@@ -81,6 +81,16 @@ test('operator chat suppresses actions that conflict with the current resume dec
   );
   assert.equal(allowedGuidance.action, 'guidance_and_resume');
   assert.equal(allowedGuidance.guidanceMessage, 'Keep the existing schema.');
+
+  const exactOperatorGuidance = enforceOperatorChatReplyForDecision(
+    guidanceReply,
+    { kind: 'needs_message' } as NealStatusSnapshot['resumeDecision'],
+    'Use PostgreSQL and preserve the existing schema.',
+  );
+  assert.equal(
+    exactOperatorGuidance.guidanceMessage,
+    'Use PostgreSQL and preserve the existing schema.',
+  );
 });
 
 test('operator chat history is run-scoped and ignores malformed lines', async () => {
