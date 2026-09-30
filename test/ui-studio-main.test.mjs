@@ -50,6 +50,11 @@ test('Studio exposes run-scoped Ask Neal chat without bypassing existing actions
   assert.match(source, /operator-chat-observation/);
   assert.match(source, /operator-chat-decision/);
   assert.match(source, /What should I do next, and why\?/);
+  assert.match(source, /'\/api\/workspace\/chat'/);
+  assert.match(source, /setChatScope\('workspace'\)/);
+  assert.match(source, /className="operator-chat-scope"/);
+  assert.match(source, /What needs my attention\?/);
+  assert.match(source, /operator-chat-focus-runs/);
 });
 
 
@@ -62,4 +67,11 @@ test('Studio config exposes independent Ask Neal provider/model/effort controls'
   assert.match(source, /changes\['studio\.chat\.effort'\]/);
   assert.match(source, /config\.chat\?\.inheritReviewer/);
   assert.match(source, /config\.roleOptions\.chat/);
+});
+
+
+test('Studio exposes workspace Ask Neal from the sidebar', () => {
+  assert.match(source, /className="sidebar-ask-neal-button"/);
+  assert.match(source, /onAskNeal=\{openWorkspaceChat\}/);
+  assert.match(source, /onFocusRun=\{focusChatRun\}/);
 });
