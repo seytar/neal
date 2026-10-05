@@ -43,7 +43,6 @@ export type NealRunUsageSnapshot = {
   runDir: string;
   planDoc: string;
   topLevelMode: OrchestrationState['topLevelMode'];
-  executionProfile: OrchestrationState['executionProfile'];
   status: OrchestrationState['status'];
   phase: OrchestrationState['phase'];
   agentConfig: AgentConfig;
@@ -90,51 +89,29 @@ function addUsage(target: RunUsageTotals, source: RunUsageTotals) {
 
 type UsageMetricsInput = {
   metrics: RunMetricsSummary;
-  agentConfig?: AgentConfig | null;
 };
 
-function configuredRolesForProvider(agentConfig: AgentConfig | null | undefined, provider: string) {
-  if (!agentConfig) {
-    return [];
-  }
-  return (['planner', 'coder', 'reviewer'] as const).filter(
-    (role) => agentConfig[role].provider === provider,
-  );
-}
-
-function semanticRole(
-  provider: RunMetricProviderSummary,
-  agentConfig: AgentConfig | null | undefined,
-) {
+// Name each bucket from what the turn recorded about itself: the provider role
+// (coder or structured-advisor) and the call-site label. Coder turns are the
+// planner when the label says so. Structured-advisor turns are the reviewer at
+// each review site, or the consultant.
+function semanticRole(provider: RunMetricProviderSummary) {
   const label = provider.label?.trim() ?? '';
-  if (/^Planner\b/i.test(label)) {
-    return 'planner';
+  if (provider.role === 'coder') {
+    return /^Planner\b/i.test(label) ? 'planner' : 'coder';
   }
-  if (/^Coder\b/i.test(label)) {
-    return 'coder';
-  }
-  if (label === 'plan-review') {
-    return 'reviewer:plan';
-  }
-  if (label === 'review') {
-    return 'reviewer:scope';
-  }
-
-  const configured = configuredRolesForProvider(agentConfig, provider.provider);
-  if (label === 'final-completion') {
-    if (configured.length === 1 && configured[0] === 'reviewer') {
+  switch (label) {
+    case 'plan-review':
+      return 'reviewer:plan';
+    case 'review':
+      return 'reviewer:scope';
+    case 'final-completion':
       return 'reviewer:final';
-    }
-    if (configured.length === 1 && configured[0] === 'coder') {
-      return 'coder:final';
-    }
+    case 'consultant':
+      return 'consultant';
+    default:
+      return label ? `${provider.role}:${label}` : provider.role;
   }
-
-  if (configured.length === 1) {
-    return configured[0];
-  }
-
-  return provider.label ? `${provider.role}:${provider.label}` : provider.role;
 }
 
 function aggregateProviderKey(provider: RunMetricProviderSummary, role: string) {
@@ -170,7 +147,7 @@ export function aggregateUsageMetrics(inputs: UsageMetricsInput[]): UsageAggrega
 
   for (const input of inputs) {
     for (const provider of input.metrics.providers) {
-      const role = semanticRole(provider, input.agentConfig);
+      const role = semanticRole(provider);
       const key = aggregateProviderKey(provider, role);
       const existing = buckets.get(key) ?? {
         provider: provider.provider,
@@ -212,10 +189,10 @@ export function aggregateUsageMetrics(inputs: UsageMetricsInput[]): UsageAggrega
   const roleOrder = new Map<string, number>([
     ['planner', 0],
     ['coder', 1],
-    ['coder:final', 2],
-    ['reviewer:plan', 3],
-    ['reviewer:scope', 4],
-    ['reviewer:final', 5],
+    ['reviewer:plan', 2],
+    ['reviewer:scope', 3],
+    ['reviewer:final', 4],
+    ['consultant', 5],
   ]);
 
   const providers = [...buckets.values()].sort((left, right) => {
@@ -289,7 +266,6 @@ async function buildRunSnapshotFromStatePath(cwd: string, statePath: string): Pr
     runDir: state.runDir,
     planDoc: state.planDoc,
     topLevelMode: state.topLevelMode,
-    executionProfile: state.executionProfile,
     status: state.status,
     phase: state.phase,
     agentConfig: state.agentConfig,
@@ -328,10 +304,7 @@ export async function buildAllUsageSnapshot(args: {
     runCount: snapshots.length,
     runs: snapshots,
     totals: aggregateUsageMetrics(
-      snapshots.map((snapshot) => ({
-        metrics: snapshot.metrics,
-        agentConfig: snapshot.agentConfig,
-      })),
+      snapshots.map((snapshot) => ({ metrics: snapshot.metrics })),
     ),
   };
 }
@@ -439,14 +412,14 @@ function displayPath(cwd: string, path: string) {
 
 export function renderHumanRunUsage(snapshot: NealRunUsageSnapshot) {
   const aggregate = aggregateUsageMetrics([
-    { metrics: snapshot.metrics, agentConfig: snapshot.agentConfig },
+    { metrics: snapshot.metrics },
   ]);
   const lines = [
     '# Neal Usage',
     '',
     `Run: ${snapshot.runId}`,
     `Plan: ${displayPath(snapshot.cwd, snapshot.planDoc)}`,
-    `Mode: ${snapshot.topLevelMode}${snapshot.executionProfile === 'shadow' ? ' (shadow)' : ''}`,
+    `Mode: ${snapshot.topLevelMode}`,
     `Status: ${snapshot.status} / ${snapshot.phase}`,
     renderCostSummary(aggregate),
     '',
