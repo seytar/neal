@@ -1,5 +1,4 @@
 import { formatMaybePublicPhase } from './phase-display.js';
-import { normalizeProviderUsage } from './provider-usage.js';
 import type { RunEvent } from './verification-events.js';
 
 export type RunUsageTotals = {
@@ -96,6 +95,14 @@ function timeMs(value: string | null) {
 
 function stringValue(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function numberValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 function addUsage(target: RunUsageTotals, value: unknown) {
