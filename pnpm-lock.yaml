@@ -65,7 +65,7 @@ importers:
         version: 8.71.0(eslint@10.11.0)(typescript@6.0.3)
       vite:
         specifier: ^8.3.0
-        version: 8.3.1(@types/node@24.19.1)(esbuild@0.28.1)(tsx@4.23.13)(yaml@2.9.1)
+        version: 8.3.1(@types/node@24.19.1)(esbuild@0.28.1)(tsx@4.23.15)(yaml@2.9.1)
 
 packages:
 
@@ -3696,7 +3696,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  vite@8.3.1(@types/node@24.19.1)(esbuild@0.28.1)(tsx@4.23.13)(yaml@2.9.1):
+  vite@8.3.1(@types/node@24.19.1)(esbuild@0.28.1)(tsx@4.23.15)(yaml@2.9.1):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -3707,7 +3707,7 @@ snapshots:
       '@types/node': 24.19.1
       esbuild: 0.28.1
       fsevents: 2.3.3
-      tsx: 4.23.13
+      tsx: 4.23.15
       yaml: 2.9.1
 
   which@2.0.2:
