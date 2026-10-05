@@ -9,7 +9,6 @@
 // instead, and that provider-reported cost always wins upstream (it never
 // reaches `resolveRateCost`).
 
-import { normalizeProviderUsage } from '../provider-usage.js';
 import { RATE_CARD, type RateCard } from './rate-card.js';
 
 export type ProviderPricing = {
@@ -17,6 +16,12 @@ export type ProviderPricing = {
   cachedInputPerMillion: number;
   outputPerMillion: number;
 };
+
+// Same coercion as `numberValue` in run-metrics.ts: non-number or non-finite
+// values normalize to 0 so the arithmetic never yields NaN.
+function num(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
 
 /**
  * Rate-compute the USD cost of one turn's token usage.
@@ -38,9 +43,8 @@ export type ProviderPricing = {
  *   clamp is the defined handling for inconsistent counts (cached reported
  *   greater than total): treat the excess as fully cached rather than emitting a
  *   negative term.
- * - `output` is the normalized output total (including nested
- *   `outputTokens.total`). It already includes reasoning tokens for these
- *   providers, so reasoning output is not added separately.
+ * - `output = output_tokens + outputTokens` — already includes reasoning
+ *   tokens for these providers, so reasoning output is not added separately.
  * - Cache-creation tokens (`cache_creation_input_tokens`) are an Anthropic-only
  *   concept billed via provider-reported cost, not by these rates, so they are
  *   intentionally excluded here.
@@ -66,7 +70,7 @@ export function computeRateCostUsd(usage: unknown, pricing: ProviderPricing): nu
     num(value.cacheReadInputTokens) +
     num(inputDetails.cacheReadTokens);
   const billedUncachedInput = Math.max(0, totalInput - cachedInput);
-  const output = normalized.outputTokens;
+  const output = num(value.output_tokens) + num(value.outputTokens);
 
   return (
     (billedUncachedInput / 1e6) * pricing.inputPerMillion +
