@@ -38,11 +38,20 @@ import {
   getPlanReviewDebtRoundThreshold,
   getReviewLevel,
   getReviewStuckWindow,
+  getStudioChatEffort,
+  getStudioChatModel,
+  getStudioChatProvider,
   type NealConfigFile,
 } from './config.js';
 import { runNewRunCommand } from './commands/new-run.js';
 import { runResumeRunCommand } from './commands/resume-run.js';
 import { runShadowCommand } from './commands/shadow.js';
+import { askOperatorChat, readOperatorChatHistory } from './operator-chat.js';
+import {
+  askWorkspaceChat,
+  readWorkspaceChatHistory,
+  type WorkspaceChatRunContext,
+} from './workspace-operator-chat.js';
 import { resolveRunStatePath } from './run-registry.js';
 import { listRegisteredProviderDefinitions } from './providers/registry.js';
 import { getExecutionPlanPath, getExecutionPlanScopeCount } from './scopes.js';
@@ -316,6 +325,43 @@ function roleFieldSource(
   return direct;
 }
 
+function hasExplicitStudioChatProvider(
+  repoConfig: NealConfigFile,
+  userConfig: NealConfigFile,
+) {
+  if (hasOwnNested(repoConfig, ['studio', 'chat', 'provider'])) {
+    return typeof repoConfig.studio?.chat?.provider === 'string' &&
+      repoConfig.studio.chat.provider.trim() !== '';
+  }
+  if (hasOwnNested(userConfig, ['studio', 'chat', 'provider'])) {
+    return typeof userConfig.studio?.chat?.provider === 'string' &&
+      userConfig.studio.chat.provider.trim() !== '';
+  }
+  return false;
+}
+
+function studioChatFieldSource(
+  field: 'provider' | 'model' | 'effort',
+  repoConfig: NealConfigFile,
+  userConfig: NealConfigFile,
+  sources: ReturnType<typeof getConfigSourceInfo>,
+): UiConfigSource {
+  const directKey = `studio.chat.${field}`;
+  const chatProviderExplicit = hasExplicitStudioChatProvider(repoConfig, userConfig);
+
+  if (chatProviderExplicit) {
+    return configSourceFor(repoConfig, userConfig, sources, directKey);
+  }
+
+  const reviewer = configSourceFor(repoConfig, userConfig, sources, `agent.reviewer.${field}`);
+  return {
+    ...reviewer,
+    kind: 'inherited',
+    key: directKey,
+    note: `inherits agent.reviewer.${field}${reviewer.path ? ` from ${reviewer.path}` : ''}`,
+  };
+}
+
 async function readUiConfigFile(path: string, exists: boolean): Promise<NealConfigFile> {
   if (!exists) {
     return {};
@@ -350,6 +396,21 @@ async function buildUiConfigSnapshot(cwd: string) {
       provider: getDefaultReviewerProvider(cwd),
       model: getDefaultReviewerModel(cwd),
       effort: getDefaultReviewerEffort(cwd),
+    },
+  };
+
+  const chatProviderExplicit =
+    hasOwnNested(repoConfig, ['studio', 'chat', 'provider']) ||
+    hasOwnNested(userConfig, ['studio', 'chat', 'provider']);
+  const chat = {
+    provider: getStudioChatProvider(cwd),
+    model: getStudioChatModel(cwd),
+    effort: getStudioChatEffort(cwd),
+    inheritReviewer: !chatProviderExplicit,
+    sources: {
+      provider: studioChatFieldSource('provider', repoConfig, userConfig, sources),
+      model: studioChatFieldSource('model', repoConfig, userConfig, sources),
+      effort: studioChatFieldSource('effort', repoConfig, userConfig, sources),
     },
   };
 
@@ -389,10 +450,12 @@ async function buildUiConfigSnapshot(cwd: string) {
     sources,
     precedence: ['repo neal.yml', 'user ~/.neal/config.yml', 'built-in defaults'],
     roles,
+    chat,
     roleOptions: {
       planner: definitions.filter((d) => d.capabilities.coder.supported).map((d) => d.id),
       coder: definitions.filter((d) => d.capabilities.coder.supported).map((d) => d.id),
       reviewer: definitions.filter((d) => d.capabilities['structured-advisor'].supported).map((d) => d.id),
+      chat: definitions.filter((d) => d.capabilities['structured-advisor'].supported).map((d) => d.id),
     },
     providerEfforts: Object.fromEntries(
       definitions.map((definition) => [
@@ -454,6 +517,9 @@ const UI_CONFIG_KEYS = new Set([
   'agent.reviewer.provider',
   'agent.reviewer.model',
   'agent.reviewer.effort',
+  'studio.chat.provider',
+  'studio.chat.model',
+  'studio.chat.effort',
   'neal.review_level',
   'providers.openai_compatible.base_url',
   'providers.openai_compatible.api_key_env',
@@ -471,7 +537,7 @@ function normalizeUiConfigValue(key: string, value: unknown) {
   const trimmed = typeof value === 'string' ? value.trim() : null;
 
   if (key.endsWith('.provider') && trimmed === null) {
-    if (key !== 'agent.planner.provider') {
+    if (key !== 'agent.planner.provider' && key !== 'studio.chat.provider') {
       throw new UiHttpError(400, `${key} cannot be unset.`);
     }
     return { operation: 'delete' as const, value: null };
@@ -483,13 +549,19 @@ function normalizeUiConfigValue(key: string, value: unknown) {
       !['json_schema', 'json_object'].includes(trimmed)) {
     throw new UiHttpError(400, 'structured_output_mode must be json_schema, json_object, or null.');
   }
+  if ((key === 'studio.chat.model' || key === 'studio.chat.effort') && trimmed === null) {
+    return { operation: 'delete' as const, value: null };
+  }
   if (key.endsWith('.effort') && trimmed === null) {
     return { operation: 'delete' as const, value: null };
   }
   if (key.endsWith('.provider') && trimmed !== null) {
-    const registered = listRegisteredProviderDefinitions().some((definition) => definition.id === trimmed);
-    if (!registered) {
+    const definition = listRegisteredProviderDefinitions().find((candidate) => candidate.id === trimmed);
+    if (!definition) {
       throw new UiHttpError(400, `Unknown provider: ${trimmed}`);
+    }
+    if (key === 'studio.chat.provider' && !definition.capabilities['structured-advisor'].supported) {
+      throw new UiHttpError(400, `Provider ${trimmed} does not support Studio chat structured-advisor calls.`);
     }
   }
   return { operation: 'set' as const, value: trimmed };
@@ -538,6 +610,36 @@ async function patchUiConfig(cwd: string, target: 'repo' | 'user', changes: Reco
   }
 
   return buildUiConfigSnapshot(cwd);
+}
+
+async function buildWorkspaceChatRuns(ctx: UiServerContext): Promise<WorkspaceChatRunContext[]> {
+  const snapshot = await buildStatusListSnapshot({ cwd: ctx.cwd, includeResumeDecision: true });
+  const titleByPlan = new Map<string, Promise<string | null>>();
+  const getTitle = (planDoc: string) => {
+    const key = resolve(planDoc);
+    const cached = titleByPlan.get(key);
+    if (cached) return cached;
+    const title = readUiIssueTitle(planDoc);
+    titleByPlan.set(key, title);
+    return title;
+  };
+
+  return Promise.all(snapshot.runs.map(async (run) => ({
+    runId: run.runId,
+    title: await getTitle(run.planDoc),
+    planDoc: relative(ctx.cwd, run.planDoc) || run.planDoc,
+    lane: classifyUiRun(run),
+    status: run.publicStatus,
+    phase: run.publicPhase,
+    nextAction: run.nextAction,
+    updatedAt: run.updatedAt,
+    waitingForOperatorGuidance: run.waitingForOperatorGuidance,
+    pendingOperatorGuidance: run.pendingOperatorGuidance,
+    resumeDecision: run.resumeDecision ?? null,
+    manualGate: run.manualGate,
+    providerError: run.providerError,
+    action: ctx.actions.get(run.runId) ?? null,
+  })));
 }
 
 async function buildUiTerminalFooterLine(status: NealStatusSnapshot) {
@@ -1290,6 +1392,23 @@ async function handleApi(
     return;
   }
 
+  if (req.method === 'GET' && pathname === '/api/workspace/chat') {
+    json(res, 200, await readWorkspaceChatHistory(ctx.cwd));
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/workspace/chat') {
+    requireWriteToken(req, ctx.token);
+    const body = await readJsonBody(req);
+    const message = requireString(body, 'message');
+    json(res, 200, await askWorkspaceChat({
+      cwd: ctx.cwd,
+      runs: await buildWorkspaceChatRuns(ctx),
+      message,
+    }));
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/api/runs') {
     const snapshot = await buildStatusListSnapshot({ cwd: ctx.cwd, includeResumeDecision: true });
     const titleByPlan = new Map<string, Promise<string | null>>();
@@ -1352,6 +1471,21 @@ async function handleApi(
 
   if (req.method === 'GET' && parts[3] === 'usage' && parts.length === 4) {
     json(res, 200, await buildRunUsageSnapshot({ cwd: ctx.cwd, runId }));
+    return;
+  }
+
+  if (req.method === 'GET' && parts[3] === 'chat' && parts.length === 4) {
+    const detail = await buildRunDetail(ctx, runId);
+    json(res, 200, await readOperatorChatHistory(detail.status));
+    return;
+  }
+
+  if (req.method === 'POST' && parts[3] === 'chat' && parts.length === 4) {
+    requireWriteToken(req, ctx.token);
+    const body = await readJsonBody(req);
+    const message = requireString(body, 'message');
+    const detail = await buildRunDetail(ctx, runId);
+    json(res, 200, await askOperatorChat({ status: detail.status, message }));
     return;
   }
 

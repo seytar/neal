@@ -58,22 +58,79 @@ function smokeScript(mode) {
         .filter(Boolean);
       document.body.dataset.smokeStatusPills = pills.join('|');
 
-      const blockerNotice = document.querySelector('.notice');
-      if (blockerNotice) {
-        document.body.dataset.smokeBlockerReason = blockerNotice.textContent.trim();
+      const newTaskButton = Array.from(document.querySelectorAll('.new-run-button'))
+        .find((button) => button.textContent.trim() === '+ New Task');
+      document.body.dataset.smokeNewTaskButton = newTaskButton ? 'true' : 'false';
+
+      const askNealButton = document.querySelector('.sidebar-ask-neal-button');
+      document.body.dataset.smokeAskNealButton = askNealButton ? 'true' : 'false';
+      document.body.dataset.smokeAskNealPanel =
+        document.querySelector('.operator-chat-panel') ? 'true' : 'false';
+      document.body.dataset.smokeAskNealWorkspaceScope =
+        Array.from(document.querySelectorAll('.operator-chat-scope button'))
+          .some((button) => button.textContent.trim() === 'Workspace' && button.classList.contains('active'))
+          ? 'true'
+          : 'false';
+      document.body.dataset.smokeAskNealShortcut =
+        Array.from(document.querySelectorAll('.operator-chat-shortcuts button'))
+          .some((button) => button.textContent.trim() === 'What needs my attention?')
+          ? 'true'
+          : 'false';
+
+      // Ask Neal is now the default Studio home. Exercise that first, then
+      // return to the selected issue before checking classic run details.
+      const backToStudio = Array.from(document.querySelectorAll('button'))
+        .find((button) => button.textContent.trim() === 'Back to Studio');
+      document.body.dataset.smokeBackToStudio = backToStudio ? 'true' : 'false';
+      if (backToStudio) {
+        backToStudio.click();
       }
 
-      const originalTab = Array.from(document.querySelectorAll('.tab'))
-        .find((tab) => tab.textContent.trim() === 'Original');
-      document.body.dataset.smokeOriginalTab = originalTab ? 'true' : 'false';
-      if (originalTab) {
-        originalTab.click();
-        setTimeout(() => {
-          const originalSource = Array.from(document.querySelectorAll('.source-label'))
-            .find((label) => label.textContent.includes('Original plan'));
-          document.body.dataset.smokeOriginalSource = originalSource ? 'true' : 'false';
-        }, 250);
+      function waitForSmoke(check, onReady, attempts = 30) {
+        const value = check();
+        if (value) {
+          onReady(value);
+          return;
+        }
+        if (attempts > 0) {
+          setTimeout(() => waitForSmoke(check, onReady, attempts - 1), 50);
+        }
       }
+
+      waitForSmoke(
+        () => {
+          const blockerNotice = document.querySelector('.notice');
+          const originalTab = Array.from(document.querySelectorAll('.tab'))
+            .find((tab) => tab.textContent.trim() === 'Original');
+          return blockerNotice && originalTab ? { blockerNotice, originalTab } : null;
+        },
+        ({ blockerNotice, originalTab }) => {
+          document.body.dataset.smokeBlockerReason = blockerNotice.textContent.trim();
+          document.body.dataset.smokeOriginalTab = 'true';
+          originalTab.click();
+
+          waitForSmoke(
+            () => Array.from(document.querySelectorAll('.source-label'))
+              .find((label) => label.textContent.includes('Original plan')),
+            () => {
+              document.body.dataset.smokeOriginalSource = 'true';
+
+              // Re-open the command center from the sidebar to verify the
+              // classic Studio surface remains reversible.
+              const reopenAskNeal = document.querySelector('.sidebar-ask-neal-button');
+              if (reopenAskNeal) {
+                reopenAskNeal.click();
+                waitForSmoke(
+                  () => document.querySelector('.operator-chat-panel'),
+                  () => {
+                    document.body.dataset.smokeAskNealReopened = 'true';
+                  },
+                );
+              }
+            },
+          );
+        },
+      );
   `;
 
   if (mode === 'drag') {
@@ -284,6 +341,22 @@ const server = createServer((req, res) => {
       json(res, runDetail);
       return;
     }
+    if (url.pathname === '/api/runs/' + runId + '/chat') {
+      json(res, {
+        path: workspaceRoot + '/.neal/runs/' + runId + '/OPERATOR_CHAT.ndjson',
+        messages: [],
+        truncated: false,
+      });
+      return;
+    }
+    if (url.pathname === '/api/workspace/chat') {
+      json(res, {
+        path: workspaceRoot + '/.neal/STUDIO_OPERATOR_CHAT.ndjson',
+        messages: [],
+        truncated: false,
+      });
+      return;
+    }
     if (url.pathname === '/api/runs/' + runId + '/activity') {
       json(res, {
         runId,
@@ -396,6 +469,13 @@ try {
   assert.match(first, /data-smoke-blocker-reason="ReasonSmoke blocker reason\."/);
   assert.match(first, /data-smoke-original-tab="true"/);
   assert.match(first, /data-smoke-original-source="true"/);
+  assert.match(first, /data-smoke-new-task-button="true"/);
+  assert.match(first, /data-smoke-ask-neal-button="true"/);
+  assert.match(first, /data-smoke-ask-neal-panel="true"/);
+  assert.match(first, /data-smoke-ask-neal-workspace-scope="true"/);
+  assert.match(first, /data-smoke-ask-neal-shortcut="true"/);
+  assert.match(first, /data-smoke-back-to-studio="true"/);
+  assert.match(first, /data-smoke-ask-neal-reopened="true"/);
   assert.match(first, /data-smoke-stored-width="440"/);
 
   const second = await dumpDom(baseUrl + '/?smoke=reload');
