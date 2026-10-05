@@ -413,6 +413,48 @@ test('scripted tool-call run returns the structured payload with the ordered eve
   assert.equal(apiRetryEvents(events).length, 0);
 });
 
+test('rate cost bills cached input at the cached rate on the real SDK usage shape', async () => {
+  // The AI SDK reports cached reads under inputTokenDetails.cacheReadTokens next
+  // to a plain inputTokens total. Driven through the real model factory so the
+  // usage object is exactly what the SDK records, and checked against a
+  // hand-computed cost rather than computeRateCostUsd itself.
+  const cwd = await createWorkDir();
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    const body = openAiChatCompletion(calls === 1 ? 'Implementation complete.' : VALID_JSON_PAYLOAD);
+    (body as Record<string, unknown>).usage = {
+      prompt_tokens: 1000,
+      completion_tokens: 300,
+      total_tokens: 1300,
+      prompt_tokens_details: { cached_tokens: 800 },
+    };
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as unknown as typeof fetch;
+  const pricing = { inputPerMillion: 3, cachedInputPerMillion: 0.3, outputPerMillion: 15 };
+  const { events, sink } = collectEvents();
+  try {
+    const adapter = openAICompatibleProviderTestHooks.createCoderAdapterWithInjection({
+      resolveSettings: () => fakeSettings({ pricing }),
+      createModel: (args) => openAICompatibleProviderTestHooks.createDefaultOpenAICompatibleModel(args),
+      sleep: async () => {},
+    });
+    await adapter.runStructuredPrompt<TestPayload>({ ...structuredArgs(cwd, sink), apiRetryLimit: 0 });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+
+  // 200 uncached at $3/M + 800 cached at $0.30/M + 300 output at $15/M.
+  const expected = (200 * 3 + 800 * 0.3 + 300 * 15) / 1e6;
+  const usageReports = events.filter((event) => event.type === 'usage_reported');
+  assert.ok(usageReports.length > 0);
+  for (const report of usageReports) {
+    assert.ok(report.type === 'usage_reported');
+    assert.ok(Math.abs((report.costUsd ?? 0) - expected) < 1e-12, `costUsd ${report.costUsd} != ${expected}`);
+  }
+});
+
 test('configured pricing attaches rate-computed cost to every usage_reported and turn_completed', async () => {
   const cwd = await createWorkDir();
   const model = scriptedModel([() => textResponse('All set.'), jsonPayloadResponse]);
@@ -724,21 +766,7 @@ test('the default model construction enables SDK structured outputs (real factor
   );
 });
 
-test('json_object mode disables transport json_schema while preserving Output.object parsing', () => {
-  const model = openAICompatibleProviderTestHooks.createDefaultOpenAICompatibleModel({
-    baseUrl: 'https://example.test/v1',
-    apiKey: 'test-key',
-    headers: {},
-    model: 'test-model',
-    structuredOutputMode: 'json_object',
-  });
-  assert.equal(
-    (model as { supportsStructuredOutputs?: unknown }).supportsStructuredOutputs,
-    false,
-  );
-});
-
-test('json_object mode gives the SDK a schema-free JSON responseFormat and validates shape locally', async () => {
+test('json_object mode gives the SDK schema-free JSON output and validates shape locally', async () => {
   const cwd = await createWorkDir();
   const model = scriptedModel([
     () => textResponse('Implementation complete.'),
@@ -758,7 +786,7 @@ test('json_object mode gives the SDK a schema-free JSON responseFormat and valid
   assert.deepEqual(model.doGenerateCalls[1].responseFormat, { type: 'json' });
 });
 
-test('json_object mode rejects schema-invalid JSON through Neal validation', async () => {
+test('json_object mode rejects schema-invalid JSON through neal validation', async () => {
   const cwd = await createWorkDir();
   const model = scriptedModel([
     () => textResponse('Implementation complete.'),
@@ -782,11 +810,13 @@ test('json_object mode rejects schema-invalid JSON through Neal validation', asy
   );
 });
 
-test('json_object mode serializes response_format=json_object on the real SDK transport', async () => {
+test('json_object mode serializes response_format=json_object through the real model factory', async () => {
   const cwd = await createWorkDir();
   const requestBodies: Array<Record<string, unknown>> = [];
   let calls = 0;
-  const captureFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+  const realFetch = globalThis.fetch;
+  // The factory binds globalThis.fetch when it builds the model, so stub it first.
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
     requestBodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
     calls += 1;
     const content = calls === 1 ? 'Implementation complete.' : VALID_JSON_PAYLOAD;
@@ -796,19 +826,37 @@ test('json_object mode serializes response_format=json_object on the real SDK tr
     });
   }) as unknown as typeof fetch;
 
-  const model = createOpenAICompatible({
-    name: 'openai-compatible',
-    baseURL: 'https://example.test/v1',
-    apiKey: 'test-key',
-    headers: {},
-    supportsStructuredOutputs: false,
-    fetch: captureFetch,
-  }).chatModel('test-model');
+  try {
+    const adapter = openAICompatibleProviderTestHooks.createCoderAdapterWithInjection({
+      resolveSettings: () => fakeSettings({ structuredOutputMode: 'json_object' }),
+      createModel: (args) => openAICompatibleProviderTestHooks.createDefaultOpenAICompatibleModel(args),
+      sleep: async () => {},
+    });
 
-  const adapter = openAICompatibleProviderTestHooks.createCoderAdapterWithInjection({
-    resolveSettings: () => fakeSettings({ structuredOutputMode: 'json_object' }),
-    createModel: () => model,
-    sleep: async () => {},
+    const result = await adapter.runStructuredPrompt<TestPayload>({
+      ...structuredArgs(cwd, () => {}),
+      apiRetryLimit: 0,
+    });
+
+    assert.deepEqual(result.structured, { done: true });
+    assert.equal(requestBodies.length, 2);
+    assert.deepEqual(requestBodies[1].response_format, { type: 'json_object' });
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('json_object mode accepts a JSON-mode reply wrapped in a json fence', async () => {
+  // Seen live: minimax/minimax-m2.7 through OpenRouter answers JSON mode with
+  // the object inside a ```json fence about half the time.
+  const cwd = await createWorkDir();
+  const model = scriptedModel([
+    () => textResponse('Implementation complete.'),
+    () => textResponse('\n\n```json\n{ "done": true }\n```'),
+  ]);
+  const adapter = createAdapter({
+    model,
+    settings: fakeSettings({ structuredOutputMode: 'json_object' }),
   });
 
   const result = await adapter.runStructuredPrompt<TestPayload>({
@@ -817,8 +865,6 @@ test('json_object mode serializes response_format=json_object on the real SDK tr
   });
 
   assert.deepEqual(result.structured, { done: true });
-  assert.equal(requestBodies.length, 2);
-  assert.deepEqual(requestBodies[1].response_format, { type: 'json_object' });
 });
 
 test('an HTTP 400 rejection on the structured finalization turn is attributable structured_output_invalid', async () => {
